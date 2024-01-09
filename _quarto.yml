@@ -12,9 +12,12 @@ website:
 
 format:
   html:
-    theme: cosmo
+    theme: yeti
     css: styles.css
     toc: true
+    mainfont: "Times New Roman"
+    fontsize: 1.25rem
+    linkcolour: "#7400b8"
 
 editor: visual
 
