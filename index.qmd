@@ -15,14 +15,8 @@ about:
       text: Github
       href: https://github.com/mekh09
   id: ppc
-
 ---
 
-:::{#ppc}
-Hi, I am Mekhala Kumar! <br>
-I am passionate about utilizing data in order to solve social issues.My research interests include migration, public health, and gender economics.<br>
-My background includes a Social Data Science master's degree from the University of Massachusetts Amherst and an undergraduate degree in Applied Mathematics and Economics from FLAME University. <br>
-Additionally, I have been practicing Karate for over a decade and hold a second DAN black belt, which has enhanced my leadership and organization skills. <br>
-This site contains the different projects I have undertaken. Feel free to contact me if you have any questions.
+::: {#ppc}
+Hi, I am Mekhala Kumar! <br> I am passionate about utilizing data in order to solve social issues.My research interests include migration, public health, and gender economics.<br> My background includes a Social Data Science master's degree from the University of Massachusetts Amherst and an undergraduate degree in Applied Mathematics and Economics from FLAME University. <br> Additionally, I have been practicing Karate for over a decade and hold a second DAN black belt, which has enhanced my leadership and organization skills. <br> This site contains the different projects I have undertaken. Feel free to contact me if you have any questions.
 :::
-

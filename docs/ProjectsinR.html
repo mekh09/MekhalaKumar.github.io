@@ -30,6 +30,8 @@ ul.task-list li input[type="checkbox"] {
 <script src="site_libs/quarto-search/fuse.min.js"></script>
 <script src="site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="./">
+<script src="site_libs/quarto-listing/list.min.js"></script>
+<script src="site_libs/quarto-listing/quarto-listing.js"></script>
 <script src="site_libs/quarto-html/quarto.js"></script>
 <script src="site_libs/quarto-html/popper.min.js"></script>
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
@@ -58,7 +60,37 @@ ul.task-list li input[type="checkbox"] {
     "search-submit-button-title": "Submit"
   }
 }</script>
+<script>
 
+  window.document.addEventListener("DOMContentLoaded", function (_event) {
+    const listingTargetEl = window.document.querySelector('#listing-listing .list');
+    if (!listingTargetEl) {
+      // No listing discovered, do not attach.
+      return; 
+    }
+
+    const options = {
+      valueNames: ['listing-date','listing-title','listing-author','listing-description','listing-categories',{ data: ['index'] },{ data: ['categories'] },{ data: ['listing-date-sort'] },{ data: ['listing-file-modified-sort'] }],
+      
+      searchColumns: ["listing-date","listing-title","listing-author","listing-description","listing-categories"],
+    };
+
+    window['quarto-listings'] = window['quarto-listings'] || {};
+    window['quarto-listings']['listing-listing'] = new List('listing-listing', options);
+
+    if (window['quarto-listing-loaded']) {
+      window['quarto-listing-loaded']();
+    }
+  });
+
+  window.addEventListener('hashchange',() => {
+    if (window['quarto-listing-loaded']) {
+      window['quarto-listing-loaded']();
+    }
+  })
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
 
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -96,14 +128,8 @@ ul.task-list li input[type="checkbox"] {
 <!-- sidebar -->
 <!-- margin-sidebar -->
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
-    <h2 id="toc-title">On this page</h2>
-   
-  <ul>
-  <li><a href="#umass" id="toc-umass" class="nav-link active" data-scroll-target="#umass">UMass</a></li>
-  </ul>
-</nav>
-    </div>
+        
+    <h5 class="quarto-listing-category-title">Categories</h5><div class="quarto-listing-category category-default"><div class="category" data-category="">All <span class="quarto-category-count">(1)</span></div><div class="category" data-category="Bangalore">Bangalore <span class="quarto-category-count">(1)</span></div><div class="category" data-category="Final">Final <span class="quarto-category-count">(1)</span></div><div class="category" data-category="Migration">Migration <span class="quarto-category-count">(1)</span></div><div class="category" data-category="Reasons for Migration">Reasons for Migration <span class="quarto-category-count">(1)</span></div></div></div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
@@ -123,14 +149,58 @@ ul.task-list li input[type="checkbox"] {
 
 </header>
 
-<section id="umass" class="level1">
-<h1>UMass</h1>
-<p>-migration</p>
 
 
-</section>
 
-</main> <!-- /main -->
+
+<div class="quarto-listing quarto-listing-container-default" id="listing-listing">
+<div class="list quarto-listing-default">
+<div class="quarto-post image-right" data-index="0" data-categories="Final,Migration,Reasons for Migration,Bangalore" data-listing-date-sort="1662177600000" data-listing-file-modified-sort="1662275576425" data-listing-reading-time-sort="29.445">
+<div class="body">
+<a href="./posts/Mekhala Final.html">
+<h3 class="no-anchor listing-title">
+Reasons for Migration in Bangalore (2011)
+</h3>
+<div class="listing-subtitle">
+
+</div>
+</a>
+<div class="listing-categories">
+<div class="listing-category" onclick="window.quartoListingCategory('Final'); return false;">
+Final
+</div>
+<div class="listing-category" onclick="window.quartoListingCategory('Migration'); return false;">
+Migration
+</div>
+<div class="listing-category" onclick="window.quartoListingCategory('Reasons for Migration'); return false;">
+Reasons for Migration
+</div>
+<div class="listing-category" onclick="window.quartoListingCategory('Bangalore'); return false;">
+Bangalore
+</div>
+</div>
+<a href="./posts/Mekhala Final.html">
+<div class="listing-description">
+<p>Final Project</p>
+</div>
+</a>
+</div>
+<div class="metadata">
+<a href="./posts/Mekhala Final.html">
+<div class="listing-date">
+Sep 3, 2022
+</div>
+<div class="listing-author">
+Mekhala Kumar
+</div>
+</a>
+</div>
+</div>
+</div>
+<div class="listing-no-matching d-none">
+No matching items
+</div>
+</div></main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
 window.document.addEventListener("DOMContentLoaded", function (event) {
   const toggleBodyColorMode = (bsSheetEl) => {
