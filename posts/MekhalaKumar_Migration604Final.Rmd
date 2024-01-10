@@ -1,0 +1,822 @@
+---
+title: "Internal Migration for Work Patterns in India"
+output: 
+  flexdashboard::flex_dashboard:
+    storyboard: true
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+#| label: setup
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(plotly)
+library(igraph)
+library(statnet)
+library(reshape2)
+library(GGally)
+library(ggnetwork)
+library(ggplot2) 
+library(sp) 
+library(raster) 
+library(broom) 
+library(stringr) 
+library(scales) 
+library(sf)
+library(viridis)
+library(ggrepel)
+library(ggthemes)
+library(geosphere)
+library(multinet)
+library(networkD3)
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+### About the Project
+
+#### **Context regarding Migration and Census data in India**
+
+The Indian Census collects information about demographics such as population, education levels, languages spoken and migration. It is collected once in every ten years and the latest one was collected in 2011. The data collection for the 2021 round has not been collected yet due to the Coronavirus pandemic (Bharadwaj & Batra, 2022).
+
+For this project, the dataset utilised is the **Indian Census Migration Data for the year 2011 (Table D03)**. I chose the dataset labelled as India which contains information on a **state-wise/union-territory-wise level.**
+
+In this project, I limited my analysis to **internal migration**, that is, movement of people to different states/union territories within India. The Indian Census has two definitions of migrants:
+
+Migrant by birth place: This is a person whose enumeration occurs in a place that is not their birthplace (Government of India, n.d.).
+
+**Migrant by place of residence:** This is a person whose place of enumeration in the current Census is different from the residence they were enumerated in during the last Census (Government of India, n.d.).
+
+Table D03 uses the second definition, it also includes information about the number of years they have resided in the area and reasons why they migrated.
+
+Moreover, there is the concept of **sending states** and **receiving states**. A sending state refers to the original location of the migrants and receiving state refers to the destination of the migrants. Typically, sending states represent that there is a lack of opportunities (such as lack of work) in that area and receiving states represent that there are more opportunities, in the context of work, there may be a certain industry such as textile or information technology that attracts more people.
+
+#### **Migration for Work**
+
+This project focuses on the migrants that move to other areas **due to employment reasons**, by utilising network analysis.
+
+**Research Aim**
+
+To identify top sending and receiving states of migrants for work. Moreover, to study patterns regarding the states they move to and variation in the same across urban and rural areas. This will help guide policy formulation.
+
+**Details regarding the project**
+
+Migration is studied via network analysis in this project. There are **28 states and 6 union territories** included in the analysis, where a **connection** is present if for example, an individual moved from State A to State B. Moreover, this **connection is weighted**, that is the analysis takes into account the **proportion of individuals** who moved for work from State A to State B to the total number of individuals who migrated for work. There is movement between virtually every state and union territory so to show only when there was a substantial amount of individuals who moved- I **only kept connections** where the **proportion** of individuals who moved for work was **greater or equal than 2%**.
+
+### Technical Details about the Project
+
+This project is intended for a general audience that may not be familiar with **network analysis** but is interested in learning about Indian Migration. Network analysis enables to see the flows of migrations and the connections on a state level so it has been utilised. If anyone is interested to know more about the packages and network algorithms used, I have provided details here.
+
+**Details about the networks**
+
+**Migration network** for entire **India**- 34 nodes and 352 edges\
+For the other 2 networks, since it is looking at flows to or from a specific state, the nodes and edges just equal to the places they have a connection with.
+
+Migration network for Uttar Pradesh as the sending state- 26 nodes and 25 edges 
+
+Migration network for Maharashtra as the sending state- 22 nodes and 21 edges
+
+All 3 networks are weighted (based on proportion of individuals who moved for work) and directed (movement from State A to State B).
+
+**Packages used**
+
+I utilised the igraph package for creating the networks and calculating associated attributes such as strength.
+
+This dashboard consists of several map visualisations which were created using the sf,sp,raster and geosphere packages. The map data was taken from [GADM](https://gadm.org/download_country.html).
+
+The sankey network plots (for Urban and Rural Migration) were created via the networkD3 package.
+
+Finally, this dashboard was made using the flexdashboard package.
+
+```{r reading in data, include=FALSE}
+# Reading in data
+mig_india <- read_excel("_data/Mekhala_data/DS-0000-D03-MDDS.XLSX",skip=5,col_names=c("tab_name","state_code","dist_code","area","res","res_time","last_res","last_res_type","tot_t","tot_m","tot_f","work_t","work_m","work_f","busi_t","busi_m","busi_f","educ_t","educ_m","educ_f","mar_t","mar_m","mar_f","afterbirth_t","afterbirth_m","afterbirth_f","withhh_t","withhh_m","withhh_f","others_t","others_m","others_f"))
+dim(mig_india)
+
+head(mig_india)
+tail(mig_india)
+# Removing unnecessary rows
+mig_india<-mig_india%>%slice(1:67500)
+tail(mig_india)
+
+# meanings for some of the important columns
+#area- state  of residence
+#res- current state of residence geographic region- Urban/Rural
+#res_time
+#last_Res- last state of residence
+#last_res_type- last state of residence geographic region- Urban/Rural
+```
+
+```{r data cleaning, include=FALSE}
+# Data cleaning
+mig_india_backup<-mig_india
+
+# Keeping only relevant observations
+mig_india<-mig_india%>%
+  filter(!str_detect(area,"INDIA"))%>%
+ # filter(str_detect(res,"Total"))%>%
+  filter(str_detect(res_time,"All durations of residence"))%>%
+  #filter(str_detect(last_res_type,"Total"))%>%
+  filter(!(last_res=="Elsewhere in the district of enumeration"|last_res=="In other districts of the state of enumeration"|last_res=="Last residence outside India"|last_res=="Last residence within India"|last_res=="States in India beyond the state of enumeration"|last_res=="Within the state of enumeration but outside the place of enumeration"|last_res=="Total"|last_res=="Countries in Asia beyond India"|last_res=="Other Countries"|last_res=="Unclassifiable"))
+  
+# Editing the residence columns so that the names match(capitalizing all the names)
+mig_india%>%dplyr::select(area)%>%distinct()
+mig_india<-mig_india%>%
+  separate(area,into=c("delete","area"),sep=" - ")%>%
+  separate(area,into=c("area","delete2"),sep="\\(")
+mig_india <- mig_india %>% dplyr::select(-c(delete,delete2))
+mig_india%>%dplyr::select(last_res)%>%distinct()
+mig_india<-mig_india%>% mutate(last_res = toupper(last_res))
+mig_india$area <- mig_india$area %>% trimws
+
+#sanity check to see if editing names worked
+mig_india%>%dplyr::select(area,last_res)%>%head()
+```
+
+```{r network creation, include=FALSE}
+mig_template<-mig_india%>%dplyr::select(last_res,res,area,work_t,tot_t,last_res_type)
+# Editing dataframe to create network for all States and Union Territories (UTs)
+mig_sub2<-mig_template%>%
+  filter(str_detect(res,"Total"))%>%
+  filter(str_detect(last_res_type,"Total"))
+mig_sub2<-mig_sub2%>%dplyr::select(-c(last_res_type))
+# Sum of total population that moved for work
+total_work<-mig_sub2%>%summarise(work_sum=sum(work_t))
+total_work
+# Creating weight based on total population that moved for work
+mig_sub2<-
+  mig_sub2%>%
+  #filter(work_t>=125534)%>%
+  mutate(work_prop = round(((work_t/total_work$work_sum)*100),2))
+summary(mig_sub2)
+
+dim(mig_sub2)
+
+hist(mig_sub2$work_prop)
+quantile(mig_sub2$work_prop)
+# Based on the quantiles- selected those who fell in the fourth quantile
+mig_subfinal<-mig_sub2%>%
+  filter(work_prop>=0.02)
+dim(mig_subfinal)
+
+# Creating the edgelist format
+mig_net<-mig_subfinal%>%
+  dplyr::select(last_res,area,work_prop)%>%
+  rename(from=last_res,to=area,weight=work_prop)
+
+#Creating the networks
+mig_work<-igraph::graph_from_data_frame(mig_net,directed=TRUE)
+mig_work_stat2<-network(mig_net,matrix.type="edgelist")
+
+#Checking network characterstics
+print(mig_work_stat2)
+
+
+#Looking for states or UTs that are not in the network
+names<-V(mig_work)$name
+names2<-unique(mig_india$area)
+
+not_common <- union(setdiff(names, names2), setdiff(names2, names))
+not_common
+
+#Lakshadweep removed from the analysis
+
+## Creating dataframe to store different measures
+
+nodes_w2<-data.frame(name = V(mig_work)$name,
+    strength_all=igraph::strength(mig_work),
+    strength_in=igraph::strength(mig_work,mode="in"),
+    strength_out=igraph::strength(mig_work,mode="out"))
+summary(nodes_w2)
+
+#Set <- c("#7400b8","#8400d2","#5e60ce", "#5390d9","#689dde", "#48bfe3", "#64dfdf", "#72efdd", "#89f2e3","#80ffdb")
+Set2 <- c("#89f2e3","#64dfdf", "#48bfe3","#5390d9","#7400b8")
+
+```
+
+### Top Sending States
+
+```{r, echo=FALSE}
+# Based on strength out- finding top states
+out_w2<-nodes_w2 %>% arrange(desc(strength_out))%>%slice(1:5)
+ggplot(out_w2, aes(fill=name,x=reorder(name,strength_out),y=strength_out))+ 
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values=Set2,guide="none")+
+  coord_flip()+
+  geom_text(aes(label=round(strength_out,digits=2)),position=position_stack(vjust=0.5))+
+  labs(title="Top Migrant-Sending States",x="States",y="Proportion of Migrants moving for Work")
+```
+
+------------------------------------------------------------------------
+
+Uttar Pradesh emerges as the state that sends out the most migrants for work, it is also the most highly populated state of India (Government of India, n.d.). It is interesting to note that, with the exception of West Bengal, all the other sending states share borders and fall in the Northern/Central region of India.
+
+### Top Receiving States
+
+```{r, echo=FALSE}
+# Based on strength in- finding top states
+in_w2<-nodes_w2 %>% arrange(desc(strength_in))%>%slice(1:5)
+ggplot(in_w2, aes(fill=name,x=reorder(name,strength_in),y=strength_in))+ 
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values=Set2,guide="none")+
+  coord_flip()+
+  geom_text(aes(label=round(strength_in,digits=2)),position=position_stack(vjust=0.5))+
+  labs(title="Top Migrant-Receiving States",x="States",y="Proportion of Migrants moving for Work")
+```
+
+------------------------------------------------------------------------
+
+Maharashtra and the capital of India, Delhi- are the top receiving states/union territories of migrants. Each of these states/union territories have cities that are home to certain industries as listed below:
+
+-   2 prominent cities that provide several work opportunities- Mumbai, the financial capital and Pune, an emerging destination for information technology and biotechnology, are present in Maharashtra (Singh, 2007; Butsch et al., 2017).
+
+-   In addition to being the political centre, Delhi is a transport, commercial and cultural hub (Ram et. al., 2021).
+
+-   Haryana contains Gurgaon, which falls under what is know as the National Capital Region (cities neighbouring Delhi) and also has several opportunities in finance and technology (The Editors of Encyclopaedia Britannica, 2023).
+
+-   Gujarat contains Surat and Ahmedabad which are known for their diamond and textile industries respectively (Jayaram & Varma, 2020; Chowdhury, 2020).
+
+-   Lastly, Bengaluru is present in Karnataka, which is regarded as the "Silicon Valley of India" due to having the largest information technology sector in the country (Dev, 2021).
+
+```{r community identification, include=FALSE}
+#Run clustering algorithm: walktrap
+workto.wt2<-walktrap.community(mig_work,weights=NULL)
+#Inspect community membership
+clusters<-igraph::groups(workto.wt2)
+igraph::groups(workto.wt2)
+
+# Storing the corresponding cluster numbers to States and UTs
+cluster_wt<-data.frame(name = character(), 
+                       clus = integer())
+for (i in 1:4) {
+  
+  temp<-as.data.frame(clusters[[i]])
+  temp<-temp%>%mutate(clus=i)
+  #print(temp)
+  cluster_wt<-rbind(cluster_wt,temp)  
+}
+
+cluster_wt<-cluster_wt%>%rename(name=`clusters[[i]]`)
+
+
+# Membership
+membership_vector <- groups(workto.wt2)
+# Saving vertex names
+vertex_names <- V(mig_work)$name
+
+#Adding community membership as a vertex attribute
+nodes_w2$comm.wt<-workto.wt2$membership
+
+#Modularity
+mod_w2<-modularity(workto.wt2)
+mod_w2
+```
+
+```{r statewise networks, include=FALSE}
+# Creating the network for Uttar Pradesh
+mig_out<-mig_net%>%filter(from=="UTTAR PRADESH")
+mig_out_ig<-igraph::graph_from_data_frame(mig_out,directed=TRUE)
+mig_out_net<-network(mig_out,matrix.type="edgelist")
+print(mig_out_net)
+mig_out_net %v% "weight"=mig_out$weight
+nodes_up<-data.frame(name = V(mig_out_ig)$name,
+                     strength_all=igraph::strength(mig_out_ig),
+                     strength_in=igraph::strength(mig_out_ig,mode="in"),
+                     strength_out=igraph::strength(mig_out_ig,mode="out"))
+summary(nodes_up)
+# Creating the network for Maharashtra
+mig_in<-mig_net%>%filter(to=="MAHARASHTRA")
+mig_in_ig<-igraph::graph_from_data_frame(mig_in,directed=TRUE)
+mig_in_net<-network(mig_in,matrix.type="edgelist")
+print(mig_in_net)
+mig_in_net %v% "weight"=mig_in$weight
+nodes_maha<-data.frame(name = V(mig_in_ig)$name,
+                       strength_all=igraph::strength(mig_in_ig),
+                       strength_in=igraph::strength(mig_in_ig,mode="in"),
+                       strength_out=igraph::strength(mig_in_ig,mode="out"))
+summary(nodes_maha)
+```
+
+```{r maps stuff,include=FALSE}
+# Reading in the Shape File
+ind<-st_read("_data/gadm41_IND_2.json")
+states_map<-read_sf("statefiles/gadm41_IND_1.shp")
+# note had to change Telangana to Andhra Pradesh because of the new map but old states in the dataset
+# Selecting the geometry to be used
+change_geom<-sf::st_cast(
+  x=ind,
+  to="POINT"
+)
+# Selecting coordinates
+coordinates2 <- st_coordinates(change_geom)
+ind_df2 <- cbind(as.data.frame(change_geom), coordinates2)
+change2<-ind_df2%>%distinct(NAME_2,.keep_all = TRUE)
+class(change2)
+final<-change2%>%dplyr::select(NAME_1,NAME_2,X,Y)
+# For the coordinates on the map- selecting one location in each state (mostly the capital cities)
+map_coord<-final %>% filter(NAME_2%in% c("Patna","Raipur","Gandhinagar","Chandigarh","Shimla","Ranchi","Bangalore","Thiruvananthapuram","Bhopal","MumbaiCity","ImphalEast","Kohima","Jaipur","Chennai","Hyderabad","Dehradun", "Lucknow","Kolkata","Daman","West","Srinagar","Puducherry", "KamrupMetropolitan","EastKhasiHills","NorthGoa","Khordha","EastSikkim","WestTripura","SouthAndaman","Lakshadweep","DadraandNagarHaveli","PapumPare","Aizawl","Ludhiana","Faridabad"))
+map_coord<-map_coord%>% mutate(name1 = toupper(NAME_1))
+# renaming states in the shapefile to match the dataset
+map_coord <- map_coord %>%
+  mutate(name = case_when(
+    name1 == "ANDAMANANDNICOBAR" ~ "ANDAMAN & NICOBAR",
+    name1 == "ARUNACHALPRADESH" ~ "ARUNACHAL PRADESH",
+    name1 == "DADRAANDNAGARHAVELI" ~ "DADRA & NAGAR HAVELI",
+    name1 == "DAMANANDDIU"~"DAMAN & DIU",
+    name1 == "HIMACHALPRADESH"~"HIMACHAL PRADESH",
+    name1 == "JAMMUANDKASHMIR" ~"JAMMU & KASHMIR",
+    name1 == "MADHYAPRADESH"~"MADHYA PRADESH",
+    name1 == "NCTOFDELHI" ~ "NCT OF DELHI",
+    name1== "UTTARPRADESH" ~ "UTTAR PRADESH",
+    name1== "WESTBENGAL" ~ "WEST BENGAL",
+    name1 == "TAMILNADU" ~ "TAMIL NADU",
+    name1 == "TELANGANA" ~ "ANDHRA PRADESH",
+    TRUE ~ name1
+  ))
+
+
+map_coord<-map_coord%>%dplyr::select(X,Y,name)
+
+# Merging and preparing data to show migration from Uttar Pradesh
+nodes_up <- nodes_up %>%
+  mutate(from="UTTAR PRADESH")
+nodes_up<-nodes_up%>%dplyr::select(from,name,strength_in)
+nodes_up<-nodes_up%>%rename(to=name)
+
+# Merging Uttar Pradesh and Indian Map data to get coordinates for from and to
+edge_data <- nodes_up %>%
+  left_join(map_coord, by = c("from" = "name")) %>%
+  left_join(map_coord, by = c("to" = "name"), suffix = c("_from", "_to"))
+
+
+states_map<-states_map%>% mutate(name1 = toupper(NAME_1))
+states_map <- states_map %>%
+  mutate(name = case_when(
+    name1 == "ANDAMAN AND NICOBAR" ~ "ANDAMAN & NICOBAR ISLANDS",
+    name1 == "DADRA AND NAGAR HAVELI" ~ "DADRA & NAGAR HAVELI",
+    name1 == "DAMAN AND DIU"~"DAMAN & DIU",
+    name1 == "JAMMU AND KASHMIR" ~"JAMMU & KASHMIR",
+    TRUE ~ name1
+  ))
+
+
+existing_nodes <- unique(c(edge_data$from, edge_data$to))
+
+states_map_filt <- states_map %>%
+  filter(name %in% existing_nodes)
+```
+
+```{r up map, include=FALSE}
+# Create a data frame with city coordinates
+map_coord_up <- map_coord %>%
+  inner_join(nodes_up, by = c("name" = "to"))
+map_coord_up<-map_coord_up%>%dplyr::select(-c(from))
+# Create a data frame for connections
+connections <- nodes_up%>%dplyr::select(from,to)
+map_coord<-map_coord%>%
+  mutate(X = ifelse(name == "MADHYA PRADESH",79.5,X))
+map_coord_up<-map_coord_up%>%
+  mutate(X = ifelse(name == "MADHYA PRADESH",79.5,X))
+# Convert data to sf
+data_sf <- st_as_sf(map_coord, coords = c("X", "Y"), crs = 4326)
+
+# Function to calculate intermediate points along the great circle path
+calculate_intermediate_points <- function(from_lon, from_lat, to_lon, to_lat, n = 50) {
+  inter <- gcIntermediate(c(from_lon, from_lat), c(to_lon, to_lat), n = n, addStartEnd = TRUE, breakAtDateLine = FALSE)
+  return(data.frame(lon = inter[, 1], lat = inter[, 2]))
+}
+
+
+# Calculate intermediate points for each connection
+intermediate_points <- apply(connections, 1, function(row) {
+  calculate_intermediate_points(map_coord_up[map_coord_up$name == row["from"], "X"],
+                                map_coord_up[map_coord_up$name == row["from"], "Y"],
+                                map_coord_up[map_coord_up$name == row["to"], "X"],
+                                map_coord_up[map_coord_up$name == row["to"], "Y"])
+})
+
+# Combine intermediate points into a single data frame
+intermediate_points_df <- do.call(rbind, intermediate_points)
+upX<-map_coord[map_coord$name == "UTTAR PRADESH", "X"]
+upY<-map_coord[map_coord$name == "UTTAR PRADESH", "Y"]
+
+
+coordwork<-map_coord_up%>%
+  dplyr::select(X,Y,strength_in)%>%
+  mutate(upX,upY)
+
+# India Map plot
+india<-ggplot(states_map)+
+  geom_sf()
+
+Set <- c("#7400b8","#8400d2","#5e60ce", "#5390d9","#689dde", "#48bfe3", "#64dfdf", "#72efdd", "#89f2e3","#80ffdb")
+
+# Creating abbreviations so that the map does not look messy
+map_coord<-map_coord%>%
+  mutate(abbr=case_when(
+    name=="ANDAMAN & NICOBAR"~"AN",
+    name=="ARUNACHAL PRADESH"~"AR",
+    name=="ASSAM"~"AS",
+    name=="BIHAR"~"BR",
+    name=="CHANDIGARH"~"CH",
+    name=="CHHATTISGARH"~"CG",
+    name=="DADRA & NAGAR HAVELI"~"DH",
+    name=="DAMAN & DIU"~"DD",
+    name=="GOA"~"GA",
+    name=="GUJARAT"~"GJ",
+    name=="HARYANA"~"HR",
+    name=="HIMACHAL PRADESH"~"HP",
+    name=="JAMMU & KASHMIR"~"JK",
+    name=="JHARKHAND"~"JH",
+    name=="KARNATAKA"~"KA",
+    name=="KERALA"~"KL",
+    name=="LAKSHADWEEP"~"LD",
+    name=="MADHYA PRADESH"~"MP",
+    name=="MAHARASHTRA"~"MH",
+    name=="MANIPUR"~"MN",
+    name=="MEGHALAYA"~"ML",
+    name=="MIZORAM"~"MZ",
+    name=="NAGALAND"~"NL",
+    name=="NCT OF DELHI"~"DL",
+    name=="ODISHA"~"OR",
+    name=="PUDUCHERRY"~"PY",
+    name=="PUNJAB"~"PB",
+    name=="RAJASTHAN"~"RJ",
+    name=="SIKKIM"~"SK",
+    name=="TAMIL NADU"~"TN",
+    name=="ANDHRA PRADESH"~"AP",
+    name=="TRIPURA"~"TR",
+    name=="UTTAR PRADESH"~"UP",
+    name=="UTTARAKHAND"~"UK",
+    name=="WEST BENGAL"~"WB"))
+# Plot cities, intermediate points, and connections
+state_connections_map <- india +
+  geom_sf(data = data_sf,size = 0.75) + # for the coordinates
+  #geom_point(data = intermediate_points_df, aes(x = lon, y = lat), color = "white", size = 0.5) +
+  geom_segment(data = coordwork, # for the connections
+               aes(x =upX,
+                   y =upY ,
+                   xend =X ,
+                   yend =Y,colour=strength_in,size=strength_in))+
+  scale_colour_gradient(name="Proportion of Migrants",low="#48bfe3",high = "#7400b8")+
+  scale_size_continuous(range = c(0.1, 3),guide= "none")+
+  geom_text(data = map_coord, aes(x = X, y = Y,label=abbr), size = 3,colour="black",hjust=0.5)+ #just for names of states
+  theme(panel.background = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())+
+  labs(title="Migration for Work Paths from Uttar Pradesh",x="",y="")
+```
+
+### Migration Patterns for Uttar Pradesh
+
+```{r, echo=FALSE}
+state_connections_map
+```
+
+------------------------------------------------------------------------
+
+Most of the top receiving states are included in the main states/union territories that migrants from Uttar Pradesh move to (Maharashtra, Delhi, Haryana, Gujarat). Other prominent states they move to are Punjab, and neighbouring states- Uttarakhand and Madhya Pradesh. It is important to note that migrants are willing to move considerable distances for work which is demonstrated by the large movement of people to Maharashtra and Gujarat.
+
+*Note*: Both size and colour of the line have been used to depict the proportion of migrants moving. A line which is more towards purple and thicker has a greater proportion of migrants.
+
+Legend for abbreviations used in the map
+
+Andaman & Nicobar-AN, Arunachal Pradesh- AR, Assam- AS, Bihar-BR, Chandigarh- CH, Chhattisgarh- CG, Dadra & Nagar Haveli-DH, Daman & Diu-DD, Goa-GA, Gujarat-GJ, Haryana-HR, Himachal Pradesh-HP, Jammu & Kashmir- JK, Jharkhand-JH, Karnataka-KA, Kerala-KL, Lakshadweep-LD, Madhya Pradesh-MP, Maharashtra-MH, Manipur-MN, Meghalaya-ML, Mizoram-MZ, Nagaland-NL, Nct Of Delhi-DL, Odisha-OR, Puducherry-PY, Punjab-PB, Rajasthan-RJ, Sikkim-SK, Tamil Nadu-TN, Andhra Pradesh-AP, Tripura-TR, Uttar Pradesh-UP, Uttarakhand-UK, West Bengal-WB
+
+```{r maharashtra map, include=FALSE}
+# Merging and preparing data to show migration to Maharashtra
+
+nodes_maha <- nodes_maha %>%
+  mutate(to="MAHARASHTRA")
+nodes_maha<-nodes_maha%>%dplyr::select(to,name,strength_out)
+nodes_maha<-nodes_maha%>%rename(from=name)
+
+# Merging Maharashtra and Indian Map data to get coordinates for from and to
+edge_data_maha<- nodes_maha %>%
+  left_join(map_coord, by = c("from" = "name")) %>%
+  left_join(map_coord, by = c("to" = "name"), suffix = c("_from", "_to"))
+
+
+
+existing_nodes2 <- unique(c(edge_data_maha$from, edge_data_maha$to))
+
+states_map_filt_maha <- states_map %>%
+  filter(name %in% existing_nodes2)
+
+# Create a data frame with city coordinates
+#map_coord
+map_coord_maha <- map_coord %>%
+  inner_join(nodes_maha, by = c("name" = "from"))
+map_coord_maha<-map_coord_maha%>%dplyr::select(-c(to))
+# Create a data frame for connections
+connections2 <- nodes_maha%>%dplyr::select(from,to)
+
+# Calculate intermediate points for each connection
+intermediate_points_maha <- apply(connections2, 1, function(row) {
+  calculate_intermediate_points(map_coord_maha[map_coord_maha$name == row["from"], "X"],
+                                map_coord_maha[map_coord_maha$name == row["from"], "Y"],
+                                map_coord_maha[map_coord_maha$name == row["to"], "X"],
+                                map_coord_maha[map_coord_maha$name == row["to"], "Y"])
+})
+
+# Combine intermediate points into a single data frame
+intermediate_points_maha_df <- do.call(rbind, intermediate_points_maha)
+mahaX<-map_coord[map_coord$name == "MAHARASHTRA", "X"]
+mahaY<-map_coord[map_coord$name == "MAHARASHTRA", "Y"]
+
+
+coordwork2<-map_coord_maha%>%
+  dplyr::select(X,Y,strength_out)%>%
+  mutate(mahaX,mahaY)
+
+
+# Plot cities, intermediate points, and connections
+state_connections_map_maha <- india +
+  geom_sf(data = data_sf,size = 0.75) + # for the coordinates
+  #geom_point(data = intermediate_points_df, aes(x = lon, y = lat), color = "white", size = 0.5) +
+  geom_segment(data = coordwork2, # for the connections
+               aes(x =mahaX,
+                   y =mahaY ,
+                   xend =X ,
+                   yend =Y ,colour=strength_out,size=strength_out))+
+  scale_colour_gradient(name="Proportion of Migrants",low="#48bfe3",high = "#7400b8")+
+  scale_size_continuous(range = c(0.1, 3),guide= "none")+
+  geom_text(data = map_coord, aes(x = X, y = Y,label=abbr), size = 3,colour="black",hjust=0.5)+ #just for names of states
+  theme(panel.background = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())+
+  labs(title="Migration for Work Paths to Maharashtra",x="",y="")
+
+```
+
+### Migration Patterns for Maharashtra
+
+```{r, echo=FALSE}
+state_connections_map_maha
+```
+
+------------------------------------------------------------------------
+
+Maharashtra receives most migrants from the top sending states identified. Once again, migrants are willing to move to regions that are far, most notably demonstrated by the migration occurring from West Bengal. Additionally, the neighbouring states of Gujarat and Karnataka send a substantial amount of migrants to Maharashtra.
+
+*Note*: Both size and colour of the line have been used to depict the proportion of migrants moving. A line which is more towards purple and thicker has a greater proportion of migrants. 
+
+Legend for abbreviations used in the map
+
+Andaman & Nicobar-AN, Arunachal Pradesh- AR, Assam- AS, Bihar-BR, Chandigarh- CH, Chhattisgarh- CG, Dadra & Nagar Haveli-DH, Daman & Diu-DD, Goa-GA, Gujarat-GJ, Haryana-HR, Himachal Pradesh-HP, Jammu & Kashmir- JK, Jharkhand-JH, Karnataka-KA, Kerala-KL, Lakshadweep-LD, Madhya Pradesh-MP, Maharashtra-MH, Manipur-MN, Meghalaya-ML, Mizoram-MZ, Nagaland-NL, Nct Of Delhi-DL, Odisha-OR, Puducherry-PY, Punjab-PB, Rajasthan-RJ, Sikkim-SK, Tamil Nadu-TN, Andhra Pradesh-AP, Tripura-TR, Uttar Pradesh-UP, Uttarakhand-UK, West Bengal-WB
+
+```{r clusters, include=FALSE}
+# Clusters map
+clustermap<-states_map %>%
+  left_join(cluster_wt, by = "name")
+# Changing the name since the data is from when Telangana and Andhra Pradesh were one state
+clustermap<-clustermap%>%
+  mutate(name_fin=case_when(
+    name == "TELANGANA" ~ "ANDHRA PRADESH",
+    TRUE~name
+  ))%>%
+  mutate(cluster=case_when(
+    name_fin == "ANDHRA PRADESH"~ 2,
+    TRUE~clus
+  ))
+clustermap<-clustermap%>%
+  dplyr::select(-c(clus))
+clustermap <- na.omit(clustermap)
+
+#warning- there is no lakshadweep shown on this map
+```
+
+### Community identification
+
+```{r cluster map, echo=FALSE}
+#Plot the map with clusters
+ggplot(clustermap)+
+  geom_sf((aes(fill=as.factor(cluster))))+
+  scale_fill_manual(name="Clusters identified",values = c("#8400d2", "#5390d9", "#48bfe3", "#64dfdf"))+
+  theme(panel.background = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())+
+  labs(title="Groups of States between which Migration for Work is Greater")
+
+```
+
+------------------------------------------------------------------------
+
+This was created using the **Walktrap algorithm** present in igraph. It depicts sub-communities of migrant connection. The **main takeaway** from this graph is that **typically individuals move to regions that are closer in distance**. The **modularity score was 0.13** which means that the sub-communities identified were significantly distinct from a random network.\
+
+```{r geographic, include=FALSE}
+## Urban and Rural networks 
+## Selecting relevant data for Uttar Pradesh
+mig_geo<-mig_template%>%dplyr::select(res,last_res,area,last_res_type,work_t,tot_t)
+dim(mig_geo)
+mig_geo<-mig_geo%>%filter(!(last_res_type=="Total"))%>%filter(!(res=="Total"))
+dim(mig_geo)
+# Adding up the numbers for Urban and Rural areas and storing the information
+mig_geo_up<-mig_geo%>%
+  dplyr::select(res,last_res,area,last_res_type,work_t)%>%
+  rename(from=last_res,to=area)%>%
+  filter(from=="UTTAR PRADESH")%>%
+  filter(to!="UTTAR PRADESH")
+tableup<-mig_geo_up%>%
+  group_by(last_res_type,res)%>%
+  summarise(value=sum(work_t))%>%
+  ungroup()
+tableup
+tableup<-tableup%>%
+  mutate(source=case_when(
+    last_res_type=="Urban"~"Urban Uttar Pradesh",
+    last_res_type=="Rural"~"Rural Uttar Pradesh"
+  ))%>%
+  mutate(target=case_when(
+    res=="Urban"~"Urban Destination",
+    res=="Rural"~"Rural Destination"
+  ))%>%
+  dplyr::select(-c(last_res_type,res))
+
+# Creating node data frame
+nodes_sankey_up <- data.frame(name=c(as.character(tableup$source), as.character(tableup$target)) %>% unique())
+nodes_sankey_up<-nodes_sankey_up%>%
+  mutate(id=case_when(
+    name=="Rural Uttar Pradesh"~0,
+    name=="Urban Uttar Pradesh"~1,
+    name=="Rural Destination"~2,
+    name=="Urban Destination"~3,
+  ))
+# Reformatting with IDs for D3 network
+tableup<-tableup%>%relocate(source,target,.before=value)
+tableup$IDsource=match(tableup$source, nodes_sankey_up$name)-1 
+tableup$IDtarget=match(tableup$target, nodes_sankey_up$name)-1
+tableup
+# prepare colour scale
+#ColourScal ='d3.scaleOrdinal() .#range(["#FDE725FF","#B4DE2CFF","#6DCD59FF","#35B779FF","#1F9E89FF","#26828EFF","#31688EFF","#3E4A89FF","#482878FF","#4401#54FF"])'
+tableup<-as.data.frame(tableup)
+colours<-c("#7400b8","#5390d9")
+
+color_scale <- 
+  "d3.scaleOrdinal()
+     .domain(['Rural Uttar Pradesh', 'Urban Uttar Pradesh'])
+     .range(['#7400b8', '#5390d9']);
+  "
+# Creating Sankey Network
+sank<-sankeyNetwork(Links = tableup, Nodes = nodes_sankey_up,
+                    Source = "IDsource", Target = "IDtarget",
+                    Value = "value", NodeID = "name", 
+                    sinksRight=FALSE, nodeWidth=40, fontSize=13, nodePadding=20,
+                    colourScale = color_scale)
+#sank <- htmlwidgets::prependContent(sank, htmltools::tags$h3("Urban and Rural Migration for Work from Uttar Pradesh"))
+
+## Selecting relevant data for Maharashtra
+mig_geo_maha<-mig_geo%>%
+  dplyr::select(res,last_res,area,last_res_type,work_t)%>%
+  rename(from=last_res,to=area)%>%
+  filter(to=="MAHARASHTRA")%>%
+  filter(from!="MAHARASHTRA")
+# Adding up the numbers for Urban and Rural areas and storing the information
+tablemaha<-mig_geo_maha%>%
+  group_by(last_res_type,res)%>%
+  summarise(value=sum(work_t))%>%
+  ungroup()
+tablemaha
+tablemaha<-tablemaha%>%
+  mutate(source=case_when(
+    last_res_type=="Urban"~"Urban Source",
+    last_res_type=="Rural"~"Rural Source"
+  ))%>%
+  mutate(target=case_when(
+    res=="Urban"~"Urban Maharashtra",
+    res=="Rural"~"Rural Mahrashtra"
+  ))%>%
+  dplyr::select(-c(last_res_type,res))
+tablemaha
+# Creating node dataframe
+nodes_sankey_maha <- data.frame(name=c(as.character(tablemaha$source), as.character(tablemaha$target)) %>% unique())
+nodes_sankey_maha<-nodes_sankey_maha%>%
+  mutate(id=case_when(
+    name=="Rural Source"~0,
+    name=="Urban Source"~1,
+    name=="Rural Maharashtra"~2,
+    name=="Urban Maharashtra"~3,
+  ))
+# Reformatting with IDs for D3 network
+tablemaha<-tablemaha%>%relocate(source,target,.before=value)
+tablemaha$IDsource=match(tablemaha$source, nodes_sankey_maha$name)-1 
+tablemaha$IDtarget=match(tablemaha$target, nodes_sankey_maha$name)-1
+tablemaha
+# prepare colour scale
+#ColourScal ='d3.scaleOrdinal() .#range(["#FDE725FF","#B4DE2CFF","#6DCD59FF","#35B779FF","#1F9E89FF","#26828EFF","#31688EFF","#3E4A89FF","#482878FF","#4401#54FF"])'
+tablemaha<-as.data.frame(tablemaha)
+
+color_scale <- 
+  "d3.scaleOrdinal()
+     .domain(['Rural Source', 'Urban Source'])
+     .range(['#7400b8', '#5390d9']);
+  "
+# Make the Sankey Network
+sank2<-sankeyNetwork(Links = tablemaha, Nodes = nodes_sankey_maha,
+                     Source = "IDsource", Target = "IDtarget",
+                     Value = "value", NodeID = "name", 
+                     sinksRight=FALSE, nodeWidth=40, fontSize=13, nodePadding=20,
+                     colourScale = color_scale)
+#sank2 <- htmlwidgets::prependContent(sank2, htmltools::tags$h3("Migration for Work to Urban and Rural Maharashtra"))
+```
+
+### Urban and Rural Migration for Work from Uttar Pradesh
+
+```{r, echo=FALSE}
+sank
+```
+
+------------------------------------------------------------------------
+
+This illustrates that majority of the people that move for work are from rural parts of Uttar Pradesh and that most move to Urban regions, demonstrating that Urban regions typically have a greater number of economic opportunities available.
+
+### Migration for Work to Urban and Rural Maharashtra
+
+```{r,echo=FALSE}
+sank2
+```
+
+------------------------------------------------------------------------
+
+Similar to the graph depicting urban and rural migration from Uttar Pradesh, most of the migrants that come to Maharashtra are from rural areas and they work in the urban areas of Maharashtra- most likely in the cities of Mumbai and Pune, where job opportunities in the finance, technology and service sectors are present (Tumbe, 2016).
+
+### Conclusion
+
+**Inferences**
+
+The visualisations allow us to understand migration flows, identify where potential economic opportunities lie or are lacking and help in suggesting policies that can be undertaken.
+
+Uttar Pradesh may have lower economic opportunities which leads to it sending out the highest number of migrants. Government initiatives can be taken to increase employment options in the state.
+
+In contrast, the urban regions of Maharashtra present several work opportunities as it receives the greatest number of migrants for work. As established earlier, there are information technology, biotechnology, finance and service sectors present in the state which are possibly attracting large numbers of migrants. In Maharashtra, there may be challenges with employment as well as housing for migrants and natives. Therefore, in Maharashtra, the government could focus on implementing policies that deal with urbanisation arising from migration.
+
+Additionally, focusing on policies that improve job options in rural areas can be undertaken since majority of the migrants hail from rural areas.
+
+**Future Research**
+
+Studying networks at a district or city level can be undertaken to get deeper insights of migration flows and to understand whether it is the entire state which sends or receives migrants or there are a few districts which are contributing to the state-wise trends observed.
+
+**Summarising Results**
+
+In conclusion, Uttar Pradesh has the largest outflow and Maharashtra has the largest inflow of migrants moving for work , urban areas tend to have more employment opportunities, and policies can be undertaken to enhance job opportunities in rural areas/Uttar Pradesh and effectively handle the growing population in urban regions/Maharashtra.
+
+### References
+
+Bhardwaj, A., & Batra, S. (2022, July 26). *No census 2021 in 2022 either - govt 'puts exercise on hold, timeframe not yet decided'.* ThePrint.https://theprint.in/india/no-census-2021-in-2022-either-govt-puts-exercise-on-hold-timeframe-not-yet-decided/1055772/
+
+Butsch, C.; Kumar, S.; Wagner, P.D.; Kroll, M.; Kantakumar, L.N.; Bharucha, E.; Schneider, K.; Kraas, F. (2017). Growing 'Smart'? Urbanization Processes in the Pune Urban Agglomeration. *Sustainability*, *9*(2335). <https://doi.org/10.3390/su9122335>
+
+Chowdhury, S. R. (2020). Migration and city competitiveness: A comparative analysis with Surat as a special case. *Vision: The Journal of Business Perspective*, *25*(4), 460--470. <https://doi.org/10.1177/0972262919900448>
+
+[Data Analytic]. (2022, Feb 10). *[R Beginners] GGPLOT India Map in GGPLOT with states, districts,cities code included.*[Video]. YouTube. <https://www.youtube.com/watch?v=6LYxkGNi4R8&list=PL0R8XrhnXnYePIaBT1wI32AOeKcyT86pR&index=17>
+
+Dev, A. (2021, March 15). *3 waves of migrations that shaped Bengaluru*. Hindustan Times. <https://www.hindustantimes.com/cities/others/3-waves-of-migrations-that-shaped-bengaluru-101615660544003.html>
+
+Deshingkar, P. & Akter, S. (2013). *Migration and Human Development in India.* Human  Development Reports, 2009/13. [[http://hdr.undp.org/en/content/migration-and-human-]{.underline}](http://hdr.undp.org/en/content/migration-and-human-) [development-india]{.underline}
+
+Government of India. (n.d.).*Drop-in-article on census - no.8 (migration).*\
+<https://censusindia.gov.in/nada/index.php/catalog/40447>
+
+Government of India. (n.d.). *POPULATION BY STATE/UT, AGE GROUP, SEX, AREA OF RESIDENCE AND EDUCATION LEVEL*. CensusIndia. <https://censusindia.gov.in/census.website/data/data-visualizations/Education_Punch-Card-Chart>
+
+Jayaram, N., Varma, D. (2020). Examining the 'Labour' in Labour Migration: Migrant Workers' Informal Work Arrangements and Access to Labour Rights in Urban Sectors. *Indian Journal of Labour Economics.* 63, 999--1019. <https://doi.org/10.1007/s41027-020-00288-5>
+
+Office of the Registrar General India. (2021). D-03: Migrants within the State/UT by place of last residence, duration of residence and reason of migration - 2011 (India). [Data set]. <https://censusindia.gov.in/census.website/data/census-tables>
+
+Ognyanova, K. (2023, July 5). *Static and dynamic network visualization with R*. Katya Ognyanova. <https://kateto.net/network-visualization>
+
+GADM. (2022). India- Shapefile. [Data set]. <https://gadm.org/download_country.html>
+
+R Graph Gallery. (n.d.). Introduction to Interactive Sankey Diagram. <https://r-graph-gallery.com/321-introduction-to-interactive-sankey-diagram-2.html>
+
+Ram, V. , Rao, . Vaddiparti Lova Surya Prakasa and Sundaram, . K.V. (2021, November 24).  *Delhi.* Encyclopedia Britannica. [[https://www.britannica.com/place/Delhi]{.underline}](https://www.britannica.com/place/Delhi)
+
+Singh, D.P.. (2007). Migration in Mumbai: Trends in Fifty Years. *Demography India. 36*(2)*.* 315-327. [(PDF) Migration in Mumbai: Trends in Fifty Years (researchgate.net)](https://www.researchgate.net/publication/346438710_Migration_in_Mumbai_Trends_in_Fifty_Years)
+
+Smith, A. [Statistics Ninja]. (2021, Nov 16). *Working with sf geospatial geometries in R.* [Video]. YouTube. <https://www.youtube.com/watch?v=BgsN-tpolZM&list=PL0R8XrhnXnYePIaBT1wI32AOeKcyT86pR&index=16&t=518s>
+
+The Editors of Encyclopaedia Britannica. (2023, December 15). *Gurugram*. Encyclopædia Britannica. <https://www.britannica.com/place/Gurugram>
+
+Tumbe, C. (2016). Urbanisation, demographic transition, and the growth of cities in India, 1870- 2020. C-35205-INC-1. International Growth Centre. [[https://www.theigc.org/wpcontent/uploads/2016/11/Tumbe-2016-Working-paper.pdf]{.underline}](https://www.theigc.org/wpcontent/uploads/2016/11/Tumbe-2016-Working-paper.pdf)
+
+**Acknowledgment of use of ChatGPT** 
+
+Utilised ChatGPT while creating the maps for reading in different map data, debugging errors that arose and creating the connections between different cities' coordinates. Additionally, for a few lines of code pertaining to finding the state/union territories not included in the network or the list of nodes present in the networks for Uttar Pradesh and Maharashtra
+
+**Other useful sources**\
+This included the [R Graph gallery site](https://r-graph-gallery.com/321-introduction-to-interactive-sankey-diagram-2.html) for Sankey plots, YouTube videos on [maps](https://www.youtube.com/watch?v=BgsN-tpolZM&list=PL0R8XrhnXnYePIaBT1wI32AOeKcyT86pR&index=16&t=518s) and working with [Indian maps](https://www.youtube.com/watch?v=6LYxkGNi4R8&list=PL0R8XrhnXnYePIaBT1wI32AOeKcyT86pR&index=17) and the [tutorial for network visualization](https://kateto.net/network-visualization).
+
+### Example of unclear network graph
+
+```{r, echo=FALSE}
+mig_work_stat2 %v% "all"=nodes_w2$strength_all
+ggnet2(mig_work_stat2, size = "all",label=TRUE,label.size=2.5, arrow.size = 2, arrow.gap = 0.03,color = rep("#48bfe3", 34))
+
+```
+
+------------------------------------------------------------------------
+
+Since network graphs are difficult to interpret, especially for denser networks such as the network studied in this project, I used alternative visualisations.

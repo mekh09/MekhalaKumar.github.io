@@ -1,0 +1,566 @@
+---
+title: "Route to Happiness: Unravelling the Link between Transportation and Quality of Life"
+author: "Mekhala Kumar"
+editor: visual
+date: "2023-12-14"
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) 
+library(stargazer) 
+library(skimr)
+library(readxl)
+library(zipcodeR)
+library(ggplot2)
+library(plotly)
+library(MASS)
+library(ggeffects)
+library(brant)
+library(performance)
+library(descr)
+library(gt)
+library(formatR)
+
+```
+
+## Primary Research Question
+
+a.  How do modes of transport impact satisfaction of life?
+b.  How do modes of transport affect one's satisfaction with quality of life?
+
+## Reading in data
+
+Dataset- National Community Livability Survey
+
+```{r}
+publictransit<-read_excel("_data/Deliverable-3b-NCLS-Dataset.xlsx",sheet="Data")
+backup<-publictransit
+# Selecting the required variables
+publictransit<-publictransit%>%dplyr::select(Hhveh,Walkrate,Transitrate,transitavail,transitavailns,LifeSat,Comqol,Hhincscale,AgeScale,Edscale,Male,White,Black,AIAN,Hawaiian,Asian,Otherrace,ZipCode,Male)
+summary(publictransit)
+#Assigning missing values and transforming variables wherever necessary
+publictransit[publictransit=="."]<-NA
+publictransit$lifesat<-as.numeric(publictransit$LifeSat)
+publictransit$qol<-as.factor(publictransit$Comqol)
+publictransit$hhveh<-as.numeric(publictransit$Hhveh)
+publictransit$walkrate<-as.numeric(publictransit$Walkrate)
+publictransit$transitrate<-as.numeric(publictransit$Transitrate)
+publictransit$ptavail<-as.numeric(publictransit$transitavail)
+publictransit$ptavailns<-as.numeric(publictransit$transitavailns)
+publictransit$male<-as.factor(publictransit$Male)
+
+publictransit<-publictransit%>%dplyr::select(-c(LifeSat,Comqol,Hhveh,Walkrate,Transitrate,transitavail,transitavailns,Male))
+# Summary Statistics at a Glance
+skim(publictransit)
+publictransit <- publictransit[complete.cases(publictransit), ]
+
+```
+
+## Primary Explanatory Independent Variables
+
+1.  Hhveh- How many working vehicles (cars, trucks, and motorcycles) are available in your household? This ranges from 0 to 3.
+2.  Walkrate- Rate the quality of walkability/accessibility in your community (scale 1-5, very poor to very good).
+3.  Transitqual- I created this variable based on transitavail (whether there is public transit) and transitrate (quality of public transit).The value=0, if there is no public transit and then for those who do have public transit in their community, the values range from 1-5.
+
+```{r}
+# Creating the perceived public transit quality variable based on transitavail and transitrate
+publictransit<-publictransit%>%
+  mutate(pt_qual=case_when(
+    ptavail==0~0,
+    ptavail==1 & transitrate==1~1,
+    ptavail==1 & transitrate==2~2,
+    ptavail==1 & transitrate==3~3,
+    ptavail==1 & transitrate==4~4,
+    ptavail==1 & transitrate==5~5
+  ))
+# Sanity check for new perceived public transit quality variable created
+table(publictransit$ptavail)
+publictransit%>%
+  dplyr::select(ptavail,transitrate,pt_qual)%>%
+  head()
+typeof(publictransit$pt_qual)
+# Converting public transit quality to factor
+publictransit$ptqual<-as.factor(publictransit$pt_qual)
+publictransit<-publictransit%>%dplyr::select(-c(pt_qual,ptavail,ptavailns,transitrate))
+
+# Creating factor type variables for number of vehicles and walkability
+publictransit$walk_fac<-as.factor(publictransit$walkrate)
+publictransit$car_fac<-as.factor(publictransit$hhveh)
+```
+
+### For the control variable- geographic region
+
+```{r}
+# Taking data from the package zipcodeR
+zip<-zip_code_db
+# Selecting the required variables from the zipcode dataset
+zip<-zip%>%dplyr::select(zipcode,population,population_density)
+# Comparing the zipcode information in the 2 datasets
+typeof(publictransit$zipcode)
+typeof(zip$zipcode)
+publictransit%>%distinct(ZipCode)
+```
+
+## Control Variables
+
+1.  Geographic region- Urban/urban cluster/rural
+
+2.  hhincscale- Income
+
+3.  AgeScale- Age
+
+4.  Edscale- Education
+
+5.  Race- White,Black,AIAN,Hawaiian,Asian,Otherrace- converted to binary
+
+6.  Male- female=0,male=1- binary
+
+```{r}
+# Checking distribution in the race variable and variable transformation
+table(publictransit$White)
+publictransit<-publictransit%>%
+  mutate(poc=case_when(
+           White==1~0,
+           White==0~1))
+ table(publictransit$poc)
+
+publictransit<-publictransit%>%dplyr::select(-c(White,Black,AIAN,Hawaiian,Asian,Otherrace))
+
+# Merging the 2 datasets (Zipcode and National Community Livability survey)
+publictransit<-publictransit%>%
+  rename(zipcode=ZipCode)
+zip$zipcode<-as.numeric(zip$zipcode)
+
+publictransit<-publictransit%>%
+    left_join(zip,by="zipcode")
+# Creating the geographic region variable based on the Census definition
+publictransit<-publictransit%>%
+  mutate(urb_rur=case_when(
+    population<2500~"Rural",
+    population>=2500 & population<50000~"Urban cluster",
+    population>=50000~"Urban"
+  ))
+# because some zipcodes don't have associated population values- those values are removed
+sum(is.na(publictransit$urb_rur))
+publictransit<-publictransit %>%
+  filter(!is.na(urb_rur))
+publictransit<-publictransit%>%
+  mutate(type=factor(urb_rur, levels=c("Rural","Urban cluster","Urban")))
+```
+
+```{r}
+str(publictransit)
+# Transforming variables wherever necessary
+publictransit$hhincscale<-as.numeric(publictransit$Hhincscale)
+publictransit$age<-as.numeric(publictransit$AgeScale)
+publictransit$educ<-as.numeric(publictransit$Edscale)
+publictransit<-publictransit%>%dplyr::select(-c(Hhincscale,AgeScale,Edscale,zipcode,population,population_density,urb_rur))
+
+```
+
+## Dependent Variables
+
+1.  LifeSat- All things considered, how satisfied are you with your life as a whole these days? (Scale: 0-10)
+2.  Comqol- How satisfied are you with the quality-of-life in your community? (Scale: 1-5)
+
+```{r}
+# Plotting distributions for the dependent variables
+ggplot(publictransit,aes(lifesat))+
+  geom_histogram(binwidth=1)+
+  geom_text(stat="count",aes(label = ..count..),vjust=0.02)+
+  labs(title="Distribution of Life Satisfaction",x="Life Satisfaction")
+mean(publictransit$lifesat)
+var(publictransit$lifesat)
+ggplot(publictransit,aes(qol))+
+  geom_bar()+
+  geom_text(stat="count",aes(label = ..count..),vjust=0.01)+
+  labs(title="Distribution of Satisfaction with Quality of Life in the Community",x=" Satisfaction with Quality of Life" )
+```
+
+# Distributions of the Independent Variables
+
+```{r}
+table(publictransit$hhveh)
+table(publictransit$walkrate)
+table(publictransit$ptqual)
+```
+
+# Models
+
+## Final Models
+
+```{r}
+# Linear regression with interaction effects
+lm1<-lm(lifesat~hhveh*ptqual+type*ptqual+walk_fac+ hhincscale+age+educ+poc+male, data=publictransit)
+# Ordinal Logistic Regression
+logit5<-polr(qol~hhveh*ptqual+type*ptqual+walkrate+ hhincscale+age+educ+poc+male, data=publictransit,method="logistic")
+```
+
+### Alternate Models
+
+```{r}
+# Linear regression
+lm2<-lm(lifesat~car_fac*ptqual+type*ptqual+walkrate+ hhincscale+age+educ+poc+male, data=publictransit)
+# Ordinal Logistic Regression
+logit2<-polr(qol~car_fac*ptqual+type*ptqual+walk_fac+ hhincscale+age+educ+poc+male, data=publictransit,method="logistic")
+# Linear regression for quality of life variable
+publictransit$qol_num<-as.numeric(publictransit$qol)
+lm_qol<-lm(qol_num~hhveh*ptqual+type*ptqual+walkrate+ hhincscale+age+educ+poc+male, data=publictransit)
+```
+
+### Tables for Comparison
+
+```{r}
+lmcomp<-stargazer(lm1,lm2, type="text",
+          dep.var.labels=c("Satisfaction with Life"),
+           covariate.labels=c("# of cars in household (numeric)",
+                              " 1 car",
+                               "2 cars",
+                              "3 cars",
+                              "Public Transit Quality (PTQ)-Level 1 (reference:0)",
+                               "PTQ Level 2",
+                               "PTQ Level 3",
+                               "PTQ Level 4",
+                                "PTQ Level 5",
+                                "Urban Cluster (reference:Rural)",
+                                 "Urban(reference:Rural)",
+                                 "Walkability Level 2 (reference:1)",
+                                  "Walkability Level 3",
+                                   "Walkability Level 4",
+                                   "Walkability Level 5",
+                                    "Walkability Rate (numeric)",
+                                    "Household Income",
+                                    "Age",
+                                  "Education",
+                                "Race (0=white,1=person of colour)",
+                                   "Gender(0=female,1=male)",
+                             "# of cars in household:PTQ Level 1",
+                            " # of cars in household:PTQ Level 2",
+                            "# of cars in household:PTQ Level 3",
+                            "# of cars in household:PTQ Level 4",
+                            "# of cars in household:PTQ Level 5",
+                            " 1 car: PTQ Level 1", 
+                            " 2 cars: PTQ Level 1", 
+                            " 3 cars: PTQ Level 1", 
+                            " 1 car: PTQ Level 2", 
+                            " 2 cars: PTQ Level 2", 
+                            " 3 cars: PTQ Level 2",
+                            " 1 car: PTQ Level 3", 
+                            " 2 cars: PTQ Level 3", 
+                            " 3 cars: PTQ Level 3",
+                            " 1 car: PTQ Level 4", 
+                            " 2 cars: PTQ Level 4", 
+                            " 3 cars: PTQ Level 4",
+                            " 1 car: PTQ Level 5", 
+                            " 2 cars: PTQ Level 5", 
+                            " 3 cars: PTQ Level 5",
+                            "PTQ Level 1:Urban Cluster",
+                            "PTQ Level 2:Urban Cluster",
+                            "PTQ Level 3:Urban Cluster",
+                            "PTQ Level 4:Urban Cluster",
+                            "PTQ Level 5:Urban Cluster",
+                            "PTQ Level 1:Urban",
+                            "PTQ Level 2:Urban",
+                            "PTQ Level 3:Urban",
+                            "PTQ Level 4:Urban",
+                            "PTQ Level 5:Urban"), single.row=TRUE)
+#cat(lmcomp, file = "output_lmcomp.html")
+
+logitcomp1<-stargazer(logit2,logit5,type="text",
+          dep.var.labels = c("Satisfaction with Quality of Life"),
+          covariate.labels=c(" 1 car",
+                               "2 cars",
+                              "3 cars",
+                             "# of cars in household",
+                              "Public Transit Quality (PTQ)-Level 1 (reference:0)",
+                               "PTQ Level 2",
+                               "PTQ Level 3",
+                               "PTQ Level 4",
+                                "PTQ Level 5",
+                             "Urban Cluster (reference:Rural)",
+                                 "Urban(reference:Rural)",
+                             "Walkability Level 2 (reference:1)",
+                                  "Walkability Level 3",
+                                   "Walkability Level 4",
+                                   "Walkability Level 5",
+                                 "Walkability Rate",
+                                    "Household Income",
+                                    "Age",
+                                  "Education",
+                                "Race (0=white,1=person of colour)",
+                                   "Gender(0=female,1=male)",
+                              " 1 car: PTQ Level 1", 
+                            " 2 cars: PTQ Level 1", 
+                            " 3 cars: PTQ Level 1", 
+                            " 1 car: PTQ Level 2", 
+                            " 2 cars: PTQ Level 2", 
+                            " 3 cars: PTQ Level 2",
+                            " 1 car: PTQ Level 3", 
+                            " 2 cars: PTQ Level 3", 
+                            " 3 cars: PTQ Level 3",
+                            " 1 car: PTQ Level 4", 
+                            " 2 cars: PTQ Level 4", 
+                            " 3 cars: PTQ Level 4",
+                            " 1 car: PTQ Level 5", 
+                            " 2 cars: PTQ Level 5", 
+                            " 3 cars: PTQ Level 5",
+                             "# of cars in household:PTQ Level 1",
+                            " # of cars in household:PTQ Level 2",
+                            "# of cars in household:PTQ Level 3",
+                            "# of cars in household:PTQ Level 4",
+                            "# of cars in household:PTQ Level 5",
+                            "PTQ Level 1:Urban Cluster",
+                            "PTQ Level 2:Urban Cluster",
+                            "PTQ Level 3:Urban Cluster",
+                            "PTQ Level 4:Urban Cluster",
+                            "PTQ Level 5:Urban Cluster",
+                            "PTQ Level 1:Urban",
+                            "PTQ Level 2:Urban",
+                            "PTQ Level 3:Urban",
+                            "PTQ Level 4:Urban",
+                            "PTQ Level 5:Urban"), single.row=TRUE)
+logitcomp2<-stargazer(logit5,lm_qol, type="text",
+          dep.var.labels = c("Satisfaction with Quality of Life"),
+          covariate.labels=c("# of cars in household",
+                              "Public Transit Quality (PTQ)-Level 1 (reference:0)",
+                               "PTQ Level 2",
+                               "PTQ Level 3",
+                               "PTQ Level 4",
+                                "PTQ Level 5",
+                             "Urban Cluster (reference:Rural)",
+                                 "Urban(reference:Rural)",
+                                 "Walkability Rate",
+                                    "Household Income",
+                                    "Age",
+                                  "Education",
+                                "Race (0=white,1=person of colour)",
+                                   "Gender(0=female,1=male)",
+                             "# of cars in household:PTQ Level 1",
+                            " # of cars in household:PTQ Level 2",
+                            "# of cars in household:PTQ Level 3",
+                            "# of cars in household:PTQ Level 4",
+                            "# of cars in household:PTQ Level 5",
+                            "PTQ Level 1:Urban Cluster",
+                            "PTQ Level 2:Urban Cluster",
+                            "PTQ Level 3:Urban Cluster",
+                            "PTQ Level 4:Urban Cluster",
+                            "PTQ Level 5:Urban Cluster",
+                            "PTQ Level 1:Urban",
+                            "PTQ Level 2:Urban",
+                            "PTQ Level 3:Urban",
+                            "PTQ Level 4:Urban",
+                            "PTQ Level 5:Urban"), single.row=TRUE)
+
+#cat(logitcomp, file = "output_logitcomp.html")
+# Checking parameters such as AIC, BIC, RMSE
+model_performance(logit2)
+```
+
+#### used in the paper but does not render properly
+
+logitcomp\<-stargazer(logit2,logit5,lm_qol,type="text", dep.var.labels = c("Satisfaction with Quality of Life","Satisfaction with Quality of Life"), covariate.labels=c(" 1 car", "2 cars", "3 cars", "\# of cars in household", "Public Transit Quality (PTQ)-Level 1 (reference:0)", "PTQ Level 2", "PTQ Level 3", "PTQ Level 4", "PTQ Level 5", "Urban Cluster (reference:Rural)", "Urban(reference:Rural)", "Walkability Level 2 (reference:1)", "Walkability Level 3", "Walkability Level 4", "Walkability Level 5", "Walkability Rate", "Household Income", "Age", "Education", "Race (0=white,1=person of colour)", "Gender(0=female,1=male)", " 1 car: PTQ Level 1", " 2 cars: PTQ Level 1", " 3 cars: PTQ Level 1", " 1 car: PTQ Level 2", " 2 cars: PTQ Level 2", " 3 cars: PTQ Level 2", " 1 car: PTQ Level 3", " 2 cars: PTQ Level 3", " 3 cars: PTQ Level 3", " 1 car: PTQ Level 4", " 2 cars: PTQ Level 4", " 3 cars: PTQ Level 4", " 1 car: PTQ Level 5", " 2 cars: PTQ Level 5", " 3 cars: PTQ Level 5", "\# of cars in household:PTQ Level 1", " \# of cars in household:PTQ Level 2", "\# of cars in household:PTQ Level 3", "\# of cars in household:PTQ Level 4", "\# of cars in household:PTQ Level 5", "PTQ Level 1:Urban Cluster", "PTQ Level 2:Urban Cluster", "PTQ Level 3:Urban Cluster", "PTQ Level 4:Urban Cluster", "PTQ Level 5:Urban Cluster", "PTQ Level 1:Urban", "PTQ Level 2:Urban", "PTQ Level 3:Urban", "PTQ Level 4:Urban", "PTQ Level 5:Urban"), single.row=TRUE)
+
+## Results for the Final Models
+
+## Linear Regression with Interaction Effects
+
+```{r}
+lm1_table<-stargazer(lm1,type="text",
+          dep.var.labels=c("Satisfaction with Life"),
+           covariate.labels=c("# of cars in household",
+                              "Public Transit Quality (PTQ)-Level 1 (reference:0)",
+                               "PTQ Level 2",
+                               "PTQ Level 3",
+                               "PTQ Level 4",
+                                "PTQ Level 5",
+                                "Urban Cluster (reference:Rural)",
+                                 "Urban(reference:Rural)",
+                                 "Walkability Level 2 (reference:1)",
+                                  "Walkability Level 3",
+                                   "Walkability Level 4",
+                                   "Walkability Level 5",
+                                    "Household Income",
+                                    "Age",
+                                  "Education",
+                                "Race (0=white,1=person of colour)",
+                                   "Gender(0=female,1=male)",
+                             "# of cars in household:PTQ Level 1",
+                            " # of cars in household:PTQ Level 2",
+                            "# of cars in household:PTQ Level 3",
+                            "# of cars in household:PTQ Level 4",
+                            "# of cars in household:PTQ Level 5",
+                            "PTQ Level 1:Urban Cluster",
+                            "PTQ Level 2:Urban Cluster",
+                            "PTQ Level 3:Urban Cluster",
+                            "PTQ Level 4:Urban Cluster",
+                            "PTQ Level 5:Urban Cluster",
+                            "PTQ Level 1:Urban",
+                            "PTQ Level 2:Urban",
+                            "PTQ Level 3:Urban",
+                            "PTQ Level 4:Urban",
+                            "PTQ Level 5:Urban"), single.row=TRUE)
+#cat(lm1_table, file = "output.html")
+
+```
+
+```{r}
+# Calculating predicted values for walkability and number of vehicles owned
+pred_ols<-ggpredict(lm1, terms="walk_fac")
+pred_ols_car<-ggpredict(lm1, terms="hhveh")
+#pred_ols
+#pred_ols_car
+# Graph for Number of Vehicles Owned
+ggplot(pred_ols_car, aes(x=x, y=predicted)) +
+ geom_point() +
+ geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+ linewidth=.3, width=.2,position=position_dodge(.9))+
+ labs(x = "Number of Vehicles in the Household", y = "Predicted Scores for Life Satisfaction") +
+  ggtitle("Effect of Having Vehicles on Life Satisfaction") 
+# Graph for Walkability
+ggplot(pred_ols, aes(x=x, y=predicted)) +
+ geom_point() +
+ geom_errorbar(aes(ymin=conf.low, ymax=conf.high),linewidth=.3, width=.2,position=position_dodge(.9))+
+ labs(x = "Perceived Walkability Rate", y = "Predicted Scores for Life Satisfaction",caption="Only significant when walkability rate=5")+
+  ggtitle("Perceived Walkability Rate and Life Satisfaction") 
+```
+
+## Ordinal Logistic Regression with Interaction Effects
+
+```{r}
+logit5table<-stargazer(logit5,type="text",
+          dep.var.labels=c("Satisfaction with Quality of Life in the Community"),
+           covariate.labels=c("# of cars in household",
+                              "Public Transit Quality (PTQ)-Level 1 (reference:0)",
+                               "PTQ Level 2",
+                               "PTQ Level 3",
+                               "PTQ Level 4",
+                                "PTQ Level 5",
+                                "Urban Cluster (reference:Rural)",
+                                 "Urban(reference:Rural)",
+                                 "Walkability Rate",
+                                    "Household Income",
+                                    "Age",
+                                  "Education",
+                                "Race (0=white,1=person of colour)",
+                                   "Gender(0=female,1=male)",
+                             "# of cars in household:PTQ Level 1",
+                            " # of cars in household:PTQ Level 2",
+                            "# of cars in household:PTQ Level 3",
+                            "# of cars in household:PTQ Level 4",
+                            "# of cars in household:PTQ Level 5",
+                            "PTQ Level 1:Urban Cluster",
+                            "PTQ Level 2:Urban Cluster",
+                            "PTQ Level 3:Urban Cluster",
+                            "PTQ Level 4:Urban Cluster",
+                            "PTQ Level 5:Urban Cluster",
+                            "PTQ Level 1:Urban",
+                            "PTQ Level 2:Urban",
+                            "PTQ Level 3:Urban",
+                            "PTQ Level 4:Urban",
+                            "PTQ Level 5:Urban"), single.row=TRUE)
+
+#cat(logit5table, file = "outputlogit5.html")
+# Checking parameters such as AIC, BIC, RMSE
+model_performance(logit5)
+
+```
+
+## Independent effects- Number of vehicles owned
+
+```{r}
+# Calculating predicted probabilities
+logitpred_car<-ggpredict(logit5, terms=c("hhveh"))
+#logitpred_car
+# Selecting only results when quality of life is 1 or 5
+filt_car<-logitpred_car%>%filter(response.level%in% c(1,5))
+# Graphical representation
+ggplot(filt_car, aes(x = x, y = predicted, fill = response.level)) +
+      geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+      geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.4, position = position_dodge(width = 0.7)) +
+      theme_minimal(base_size = 13) +
+      labs(x = "Number of Vehicles in the Household", y = "Predicted Probability", 
+           title = "Predicted Probability for Quality of Life based on Number of Vehicles") +
+      labs(fill = "Quality of Life in the Community") +
+      scale_fill_manual(values = c("1" = "antiquewhite", 
+                                   "5" = "grey39"))+
+      theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1))
+```
+
+## Independent effects- Perceived walkability rate
+
+```{r}
+# Calculating predicted probabilities
+logitpred_walk<-ggpredict(logit5, terms=c("walkrate"))
+#logitpred_walk
+# Selecting only results when quality of life is 1 or 5
+filt<-logitpred_walk%>%filter(response.level%in% c(1,5))
+# Graphical representation
+ggplot(filt, aes(x = x, y = predicted, fill = response.level)) +
+      geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+      geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.4, position = position_dodge(width = 0.7)) +
+      theme_minimal(base_size = 13) +
+      labs(x = "Perceived Walkability Rate", y = "Predicted Probability", 
+           title = "Predicted Probability for Quality of Life based on \nPerceived Walkability Rate") +
+      labs(fill = "Quality of Life in the Community") +
+      scale_fill_manual(values = c("1" = "antiquewhite", 
+                                   "5" = "grey39"))+
+      theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1))
+```
+
+## Independent effects- Perceived public transit quality
+
+```{r}
+# Calculating predicted probabilities
+logitpred_pt<-ggpredict(logit5, terms=c("ptqual"))
+#logitpred_pt
+# Selecting only results when quality of life is 1 or 5
+filt2<-logitpred_pt%>%filter(response.level%in% c(1,5))
+# Graphical representation
+ggplot(filt2, aes(x = x, y = predicted, fill = response.level)) +
+      geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+      geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.4, position = position_dodge(width = 0.7)) +
+      theme_minimal(base_size = 13) +
+      labs(x = "Perceived Public Transit Quality Rate", y = "Predicted Probability", 
+           title = "Predicted Probability for Quality of Life based on\nPerceived Public Transit Quality Rate") +
+      labs(fill = "Quality of Life in the Community",caption="Significant when Public Transit Quality=5") +
+      scale_fill_manual(values = c("1" = "antiquewhite", 
+                                   "5" = "grey39"))+
+      theme(legend.position = c(0.05, 0.95), legend.justification = c(0, 1))+
+  scale_x_discrete(breaks = c(0,1,2,3,4,5), labels = c("No\n public\n transit","1","2","3","4", "Highest quality\n of public\n transit"))
+```
+
+## Interaction Effect- Perceived Public Transit Quality Rate and Geographic Region
+
+```{r}
+#Calculating predicted probabilites but selecting only 2 levels of perceived public transit quality
+pred_logit5_diff<-ggpredict(logit5, terms=c("type", "ptqual[0,5]"))
+#pred_logit5_diff
+# Selecting only results when quality of life is 1 or 5
+predl5_diff <- pred_logit5_diff %>%
+    filter(response.level==1|response.level==5)  
+#Graphical representation
+ggplot(predl5_diff, aes(x = group, y = predicted, fill = response.level)) +
+      geom_bar(stat = "identity",  width = 0.7 , position = position_dodge()) +
+      facet_grid(. ~ x) +  # Create separate panels for each group
+      theme_minimal(base_size = 13) +
+      labs(fill="Quality of Life\nin the\nCommunity",x = "Public Transit Quality Rate ", y = "Predicted Probability", 
+             title = "Predicted Probability for Quality of Life based on Geographic Area\n and Perceived Public Transit Quality",caption="Significant when Public Transit Quality=5")+
+      geom_errorbar(aes(ymin=conf.low, ymax=conf.high),
+                    linewidth=.3,    # Thinner lines
+                    width=.2, position = position_dodge(width=.7))+
+      scale_fill_manual(values = c("1" = "antiquewhite", 
+                                   "5" = "grey39"))+
+  scale_x_discrete(breaks = c(0, 5), labels = c("No\n public\n transit", "Highest quality\n of public\n transit"))
+```
+
+## References
+
+Texas A&M Transport Institute. (2017). National Community Livabilty Survey. \[Dataset\]. <https://transit-mobility.tti.tamu.edu/resources/data-from-national-community-livability-survey/>
+
+Ratcliffe, M. (2022, December 22). *Redefining urban areas following the 2020 census*. Census.gov. <https://www.census.gov/newsroom/blogs/random-samplings/2022/12/redefining-urban-areas-following-2020-census.html>
+
+## Note
+
+1.  Used ChatGPT to fix an error with geom_text in the graphs.
+2.  Used ChatGPT to figure out how to export stargazer tables.
