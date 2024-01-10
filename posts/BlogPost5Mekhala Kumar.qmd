@@ -56,35 +56,35 @@ dfnews_edit <- dfnews %>%
  woman <- dfnews_edit %>% 
    filter(!grepl("MEN'S", Tags))%>%
     filter(grepl("NARI", Tags))
- woman
+ #woman
  
 wom1<-woman%>%
   mutate(Classification="Women")
-wom1
+#wom1
 dim(wom1)
 
 #Men's sports
 men <- dfnews_edit %>% 
    filter(!grepl("NARI", Tags))%>%
     filter(grepl("MEN'S", Tags))
-men
+#men
 men1<-men%>%
   mutate(Classification="Men")
-men1
+#men1
 dim(men1)
 #Men's sports and women's sports combined
 both<-dfnews_edit%>%
   filter(grepl("MEN'S.*NARI|NARI.*MEN'S", Tags))
-both
+#both
 dim(both)
 both<-both%>%
   mutate(Classification="MenAndWomen")
-both
+#both
 
 #sanity check
 remaining<-dfnews_edit %>% 
    filter(!grepl("NARI|MEN'S|MEN'S.*NARI|NARI.*MEN'S", Tags))
-remaining
+#remaining
 dim(remaining)
 ```
 
