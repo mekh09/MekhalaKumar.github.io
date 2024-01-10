@@ -132,7 +132,7 @@ newspaper_corpus_summary$Tokens
 Checking for metadata, creating tokens, removing punctuation and removing stopwords.
 
 ```{r}
-docvars(newspaper_corpus)
+#docvars(newspaper_corpus)
 
 newspaper_tokens <- tokens(newspaper_corpus)
 head(newspaper_tokens)
@@ -182,7 +182,7 @@ plot(differentKs)
 
 ## Structural Topic model
 
-```{r}
+```{r, include=FALSE}
 k <- 25
 news_stm <- stm(news_dfm_stm,
                K = k,
