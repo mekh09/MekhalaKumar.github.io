@@ -3,6 +3,7 @@ title: "Internal Migration for Work Patterns in India"
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
+      source_code: embed
 ---
 
 ```{r setup, include=FALSE}
