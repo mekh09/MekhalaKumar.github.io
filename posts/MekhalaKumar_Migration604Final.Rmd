@@ -5,7 +5,6 @@ author: Mekhala Kumar
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
-    source_code: embed
 ---
 
 ```{r setup, include=FALSE}
