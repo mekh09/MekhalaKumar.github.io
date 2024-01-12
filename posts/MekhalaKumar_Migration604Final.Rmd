@@ -1,6 +1,7 @@
 ---
 title: "Internal Migration for Work Patterns in India"
 date: "12/15/2023"
+author: Mekhala Kumar
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
