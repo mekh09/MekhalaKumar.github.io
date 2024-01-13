@@ -5,6 +5,7 @@ author: Mekhala Kumar
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
+    runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
