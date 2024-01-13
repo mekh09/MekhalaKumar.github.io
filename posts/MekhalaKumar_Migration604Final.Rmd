@@ -1,11 +1,10 @@
 ---
 title: "Internal Migration for Work Patterns in India"
+author: "Mekhala Kumar"
 date: "12/15/2023"
-author: Mekhala Kumar
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
-    runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
