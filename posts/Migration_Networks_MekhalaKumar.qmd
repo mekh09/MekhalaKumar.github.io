@@ -1,0 +1,586 @@
+---
+title: "Migration Networks"
+author: "Mekhala Kumar"
+description: "final project"
+date: "05/22/2023"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-copy: true
+    code-tools: true
+# editor: visual
+categories: 
+  - Final Project
+  - Mekhala Kumar
+  - Indian Census data
+  - Internal Migration
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(plotly)
+library(igraph)
+library(statnet)
+library(reshape2)
+library(GGally)
+library(ggnetwork)
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+# **Network Analysis of Internal Migration: Unravelling Work and Marriage Migration Patterns in India**
+
+# Dataset for the Project
+
+The Indian Census collects information about demographics such as population, education levels, languages spoken and migration. It is collected once in every ten years and the latest one was collected in 2011. The data collection for the 2021 round has not been collected yet due to the Coronavirus pandemic (Bharadwaj & Batra, 2022).
+
+For this project, the dataset utilised is the Indian Census Migration Data for the year 2011 (Table D03). I chose the dataset labelled as India which contains information on a state-wise/union-territory-wise level.
+
+In this project, I limited my analysis to internal migration, that is, movement of people to different states/union territories within India. The Indian Census has two definitions of migrants:
+
+Migrant by birth place: This is a person whose enumeration occurs in a place that is not their birthplace (Government of India, n.d.).
+
+Migrant by place of residence: This is a person whose place of enumeration in the current Census is different from the residence they were enumerated in during the last Census (Government of India, n.d.).
+
+Table D03 uses the second definition, it also includes information about the number of years they have resided in the area and reasons why they migrated.
+
+In the Data Science Fundamentals course (DACSS601), I studied reasons people migrated to Bangalore. For this project, I wanted to explore reasons people migrated at the country level, which can be studied through a network. I limited my analysis to two reasons: movement for work and marriage.
+
+## Note
+
+I also wanted to note that I took the proportion of migrants that moved from State 1 to State 2 for a particular reason of migration. In further detail, I calculated the proportion by dividing the number of people who moved from State 1 to State 2 for a particular reason by the total number of people who moved from State 1 to State 2. For example, if 5 million people moved from Maharashtra to Karnataka for work and the total number of people who moved was 10 million, then the proportion would be 50%. This was done to control for population bias because certain states send or receive more people simply due to them having a higher population. I noticed this when I created a network based on actual population numbers. It showed Uttar Pradesh as one of the top sending states for various reasons of migration but it was not meaningful since this is the most populated state of India.
+
+# Research Question
+
+To study whether there are different internal migration patterns associated with movement for work and movement for marriage.
+
+# Reading in the Data
+
+The first few rows and last few rows are unnecessary so they have been removed.
+
+```{r}
+mig_india <- read_excel("_data/Mekhala_data/DS-0000-D03-MDDS.XLSX",skip=5,col_names=c("tab_name","state_code","dist_code","area","res","res_time","last_res","last_res_type","tot_t","tot_m","tot_f","work_t","work_m","work_f","busi_t","busi_m","busi_f","educ_t","educ_m","educ_f","mar_t","mar_m","mar_f","afterbirth_t","afterbirth_m","afterbirth_f","withhh_t","withhh_m","withhh_f","others_t","others_m","others_f"))
+dim(mig_india)
+
+head(mig_india)
+tail(mig_india)
+
+mig_india<-mig_india%>%slice(1:67500)
+tail(mig_india)
+```
+
+# Data Cleaning
+
+Many of the columns contain aggregate values in addition to individual values. For example, it contains the number of people who migrated from each state as well the total people who migrated across all states in India. To avoid the numbers being counted twice, I removed the aggregate values. Moreover, since this is a study of internal migration, I removed observations which were about international migrants.
+
+```{r}
+#area
+mig_india %>% 
+  count(area)
+#res
+mig_india %>% 
+  count(res)
+
+#res_time
+mig_india %>% 
+  count(res_time)
+#last_Res
+mig_india %>% 
+  count(last_res)
+
+#last_res_type
+mig_india %>% 
+  count(last_res_type)
+```
+
+Some additional aggregate values and observations not required have been removed.
+
+```{r}
+mig_india<-mig_india%>%
+  filter(!str_detect(area,"INDIA"))%>%
+  filter(str_detect(res,"Total"))%>%
+  filter(str_detect(res_time,"All durations of residence"))%>%
+  filter(str_detect(last_res_type,"Total"))%>%
+  filter(!(last_res=="Elsewhere in the district of enumeration"|last_res=="In other districts of the state of enumeration"|last_res=="Last residence outside India"|last_res=="Last residence within India"|last_res=="States in India beyond the state of enumeration"|last_res=="Within the state of enumeration but outside the place of enumeration"|last_res=="Total"|last_res=="Countries in Asia beyond India"|last_res=="Other Countries"|last_res=="Unclassifiable"))
+  
+#area
+mig_india %>% 
+  count(area)
+#res
+mig_india %>% 
+  count(res)
+
+#res_time
+mig_india %>% 
+  count(res_time)
+#last_Res
+mig_india %>% 
+  count(last_res)
+
+#last_res_type
+mig_india %>% 
+  count(last_res_type)
+```
+
+This step was done to ensure that both the from and to columns in the edgelist would have observations in the same format.
+
+```{r}
+mig_india%>%select(area)%>%distinct()
+mig_india<-mig_india%>%
+  separate(area,into=c("delete","area"),sep=" - ")%>%
+  separate(area,into=c("area","delete2"),sep="\\(")
+mig_india <- mig_india %>% select(-c(delete,delete2))
+mig_india%>%select(last_res)%>%distinct()
+mig_india<-mig_india%>% mutate(last_res = toupper(last_res))
+mig_india$area <- mig_india$area %>% trimws
+```
+
+# Changing the data to the network object
+
+In this network, the nodes represent the states/union territories of India. There were 28 states and 7 union territories in India in 2011 so the number of nodes will be 35. From now on, I will be referring to both the states and union territories as states. The ties denote the movement of people from one state to the other. Finally the weights are of the proportion of people moving for work or for marriage (in 2 separate networks). The data is in the form of an edgelist with the sending state, receiving state and the proportion of people moving.
+
+## Exploratory Data Analysis of Potential Weights
+
+Before creating the networks, I checked potential weights to use for the networks. I checked for three reasons of movement: work, education and marriage. I calculated the proportions for each, in relation to the total people who moved. The density plots depict that most people move for work, followed by marriage and then education. The correlation between the proportion of migrants who moved for work and those who moved for marriage was the strongest. I decided to compare networks with weights based on these two reasons. A linear regression between the proportions for the two reasons chosen also showed that more people move for work in comparison to those who move due to marriage.
+
+```{r}
+mig_sub<-mig_india%>%
+  relocate(last_res,area,tot_t,work_t,educ_t,mar_t)
+mig_sub<-mig_sub[1:6]
+
+mig_sub<-
+  mig_sub%>%
+  mutate(work_prop = round(((work_t/tot_t)*100),2),educ_prop = round(((educ_t/tot_t)*100),2),mar_prop = round(((mar_t/tot_t)*100),2))
+summary(mig_sub)
+
+mig_sub <- mig_sub %>% 
+    mutate_at(c('work_prop','educ_prop','mar_prop'), ~replace_na(.,0))
+
+
+plot(density(mig_sub$work_prop))
+plot(density(mig_sub$educ_prop))
+plot(density(mig_sub$mar_prop))
+
+cor(mig_sub$mar_prop, mig_sub$work_prop)
+cor(mig_sub$educ_prop, mig_sub$work_prop)
+cor(mig_sub$educ_prop, mig_sub$mar_prop)
+lm(mig_sub$work_prop~mig_sub$mar_prop)
+reg1<-lm(mig_sub$work_prop~mig_sub$mar_prop)
+summary(reg1)
+ plot(reg1)
+```
+
+## Selecting a threshold
+
+Using the data as it currently is would make the network too dense. There is movement between almost every state and some of these movements are irrelevant because the proportion is smaller than 1%. Hence, I looked into the distributions of the proportions of people who moved for work and marriage, in order to decide a threshold.
+
+## Using work as the weight
+
+```{r}
+mig_network<-mig_sub%>%
+  relocate(work_prop,.before=tot_t)%>%
+  rename(from=last_res,to=area,weight=work_prop)
+mig_network<-mig_network[1:3]
+
+hist(mig_network$weight)
+quantile(mig_network$weight)
+```
+
+## Using marriage as the weight
+
+```{r}
+mig_mar<-mig_sub%>%
+  relocate(mar_prop,.before=tot_t)%>%
+  rename(from=last_res,to=area,weight=mar_prop)
+mig_mar<-mig_mar[1:3]
+
+hist(mig_mar$weight)
+quantile(mig_mar$weight)
+
+```
+
+## Threshold
+
+After observing the distribution of the proportions of the reasons along with the quantiles, I decided to keep a threshold of 20%, this would roughly cover about half of the total observations for people who moved for work and the last quantile of the people who moved due to marriage.
+
+# Creating the networks
+
+## Network based on work
+
+```{r}
+mig_net_threshold<- mig_network%>% 
+ filter(weight>=20)
+dim(mig_network)
+dim(mig_net_threshold)
+mig_work_ig<-igraph::graph_from_data_frame(mig_net_threshold,directed=TRUE)
+mig_work_stat<-network(mig_net_threshold,matrix.type="edgelist")
+
+```
+
+## Network based on marriage
+
+```{r}
+mig_mar_threshold <- mig_mar%>%
+  filter(weight>=20)
+dim(mig_mar_threshold)
+mig_mar_ig<-igraph::graph_from_data_frame(mig_mar_threshold,directed=TRUE)
+mig_mar_stat<-network(mig_mar_threshold,matrix.type="edgelist")
+
+```
+
+## Descriptives of all the networks
+
+I kept both the descriptives from statnet and igraph because in a previous challenge, I found inconsistencies in the number of edges and other details and wanted to make sure that the same issue is not occurring here.
+
+## Description for migration for work
+
+```{r}
+print(mig_work_stat)
+vcount(mig_work_ig)
+ecount(mig_work_ig)
+is_bipartite(mig_work_ig)
+is_directed(mig_work_ig)
+is_weighted(mig_work_ig)
+```
+
+## Description for migration due to marriage
+
+```{r}
+print(mig_mar_stat)
+vcount(mig_mar_ig)
+ecount(mig_mar_ig)
+is_bipartite(mig_mar_ig)
+is_directed(mig_mar_ig)
+is_weighted(mig_mar_ig)
+```
+
+## Components
+
+There is 1 component for the migrant network pertaining to movement for work as well as for the network pertaining to movement for marriage which means that both are connected graphs.
+
+```{r}
+names(igraph::components(mig_work_ig))
+#igraph::components(mig.ig)$membership
+igraph::components(mig_work_ig)$no 
+igraph::components(mig_work_ig)$csize
+```
+
+```{r}
+names(igraph::components(mig_mar_ig))
+#igraph::components(mig.ig)$membership
+igraph::components(mig_mar_ig)$no 
+igraph::components(mig_mar_ig)$csize
+```
+
+## Density
+
+Since a threshold was set after checking the quantiles, the density was manually created. However, these figures do show that for the same threshold, the migrant network for movement for work is more dense than the migrant network for movement for marriage. This illustrates that more people tend to move for economic opportunities in comparison to marriage.
+
+```{r}
+graph.density(mig_work_ig,loops=FALSE)
+graph.density(mig_mar_ig,loops=FALSE)
+```
+
+# Plotting the networks
+
+The plots of the networks visually demonstrate the density.
+
+```{r, warning=FALSE}
+# switch to statnet object to plot
+ggnet2(mig_work_stat,label=TRUE,label.size=2.5, arrow.size = 5, arrow.gap = 0.03,color = rep("#48bfe3", 35))
+#save a ggnet layout that you like
+```
+
+```{r, warning=FALSE}
+# switch to statnet object to plot
+ggnet2(mig_mar_stat,label=TRUE,label.size=2.5, arrow.size = 5, arrow.gap = 0.03,color = rep("#48bfe3", 35))
+#save a ggnet layout that you like
+```
+
+## Creating the dataframes to store different measures of networks
+
+```{r}
+Set <- c("#7400b8","#8400d2","#5e60ce", "#5390d9","#689dde", "#48bfe3", "#64dfdf", "#72efdd", "#89f2e3","#80ffdb")
+
+```
+
+```{r}
+nodes_w<-data.frame(name = V(mig_work_ig)$name,
+    all.degree = igraph::degree(mig_work_ig, mode = 'all'), 
+    out.degree = igraph::degree(mig_work_ig, mode = 'out'),
+    in.degree = igraph::degree(mig_work_ig, mode = 'in'), 
+    strength_all=igraph::strength(mig_work_ig),
+    strength_in=igraph::strength(mig_work_ig,mode="in"),
+    strength_out=igraph::strength(mig_work_ig,mode="out"),
+    cons=igraph::constraint(mig_work_ig),
+    eigen=igraph:: evcent(mig_work_ig)$vector)
+nodes_w$transitivity <- transitivity(mig_work_ig, type = 'local')
+nodes_w$weighted.transitivity <-  transitivity(mig_work_ig, type = 'weighted')
+gtrans(mig_work_stat)
+summary(nodes_w)
+
+
+nodes_m<-data.frame(name = V(mig_mar_ig)$name,
+    all.degree = igraph::degree(mig_mar_ig, mode = 'all'), 
+    out.degree = igraph::degree(mig_mar_ig, mode = 'out'),
+    in.degree = igraph::degree(mig_mar_ig, mode = 'in'), 
+    strength_all=igraph::strength(mig_mar_ig),
+    strength_in=igraph::strength(mig_mar_ig,mode="in"),
+    strength_out=igraph::strength(mig_mar_ig,mode="out"),
+    cons=igraph::constraint(mig_mar_ig),
+    eigen=igraph:: evcent(mig_mar_ig)$vector)
+#Global
+transitivity(mig_mar_ig, type="global")
+##Average local clustering coefficient
+transitivity(mig_mar_ig, type="average")
+nodes_m$transitivity <- transitivity(mig_mar_ig, type = 'local')
+nodes_m$weighted.transitivity <-  transitivity(mig_mar_ig, type = 'weighted')
+gtrans(mig_mar_stat)
+summary(nodes_m)
+
+```
+
+# Transitivity
+
+In the migration network weighted for movement due to work, the transitivity values for the global and average clustering coefficients are both roughly 0.85. This depicts that every state is connected to almost every other remaining state. In other words, migration occurs between almost all states. However, the proportion of migrants for each connection may not be a significant amount. This is explored by using strength as a network measure.
+
+In the migration network weighted for movement due to marriage, the transitivity is lower, with a global clustering coefficient of roughly 0.55 and local clustering coefficient of roughly 0.63. This demonstrates that there are densely interconnected subgroups. It also shows that when it comes to migration for marriage, people are more selective.
+
+In India, arranged marriages are common and marriages within the same caste are preferred (Sahgal et al., 2021). The caste system is a social stratification system; one is born into a fixed social group referred to as their caste ("Systems of Social Stratification", n.d.). While people of the same caste can reside in multiple states, perhaps the cultural differences between states result in people being more selective about marriage.
+
+Many states have their own languages, distinct food, festivals, etc. Often the language or food habits may be similar for neighbouring states. Therefore, it may be the case that the subgroups are formed based on neighbouring states since one would prefer to marry someone who is culturally similar. Whether the subgroups are based on states that share boundaries or in a particular region can be explored through clustering.
+
+```{r}
+#Global
+transitivity(mig_work_ig, type="global")
+##Average local clustering coefficient
+transitivity(mig_work_ig, type="average")
+melt(nodes_w) %>% filter(variable == 'transitivity' | variable == 'weighted.transitivity') %>% 
+  ggplot(aes(x = value, fill = variable, color = variable)) + geom_density(alpha = 0.2) +
+  ggtitle('Transitivity Distribution, Local and Weighted for Migration due to Work')
+
+#Global
+transitivity(mig_mar_ig, type="global")
+##Average local clustering coefficient
+transitivity(mig_mar_ig, type="average")
+melt(nodes_m) %>% filter(variable == 'transitivity' | variable == 'weighted.transitivity') %>% 
+  ggplot(aes(x = value, fill = variable, color = variable)) + geom_density(alpha = 0.2) +
+  ggtitle('Transitivity Distribution, Local and Weighted for Migration due to Marriage')
+```
+
+## Degree overview
+
+The measures of degree represent how certain states have multiple connections, however, since there are weights this might not be the most accurate depiction. This is because some states could have many ties with other states but the proportion of people who are moving could be low. Therefore, I looked into the strength measure which takes the weights into account.
+
+```{r}
+nodes_w%>%select("name","all.degree","in.degree","out.degree")%>%arrange(desc(all.degree))
+nodes_m%>%select("name","all.degree","in.degree","out.degree")%>%arrange(desc(all.degree))
+
+```
+
+# Strength
+
+```{r}
+nodes_w %>% melt %>%filter(variable=='strength_all'|variable=='strength_in'|variable=='strength_out')%>%
+  ggplot(aes(x = value, fill = variable, color = variable)) + geom_density(alpha = .2, bw = 5) +
+  ggtitle('Strength Distribution')
+nodes_m %>% melt %>%filter(variable=='strength_all'|variable=='strength_in'|variable=='strength_out')%>%
+  ggplot(aes(x = value, fill = variable, color = variable)) + geom_density(alpha = .2, bw = 5) +
+  ggtitle('Strength Distribution')
+```
+
+## Strength- Out
+
+For the migrants moving out for work, it is interesting to see that the top 3 states are neighbouring states. West Bengal, Chhattisgarh and Uttar Pradesh also share borders with the top 3 states. So there is majorly out migration from work occurring from the Eastern part and a bit of the Northern part of India . This suggests that these regions may not have as many economic opportunities or chances for growth.
+
+For the movement due to marriage, 2 of the top 3 places (Dadra & Nagar Haveli and Puducherry) are union territories which have a smaller population in comparison to other states. Additionally, a prominent region of out migration for marriage can be observed from the North western region of India (Punjab, Rajasthan and Haryana).
+
+```{r}
+out_w<-nodes_w %>% arrange(desc(strength_out))%>%slice(1:10)
+ggplot(out_w, aes(fill=name,x=reorder(name,strength_out),y=strength_out))+ 
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values=Set,guide="none")+
+  coord_flip()+
+  geom_text(aes(label=round(strength_out,digits=2)),position=position_stack(vjust=0.5))
+
+
+out_m<-nodes_m%>% arrange(desc(strength_out))%>%slice(1:10)
+ggplot(out_m, aes(fill=name,x=reorder(name,strength_out),y=strength_out))+ 
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values=Set,guide="none")+
+  coord_flip()+
+  geom_text(aes(label=round(strength_out,digits=2)),position=position_stack(vjust=0.5))
+```
+
+## Strength- In
+
+For the migrants moving to places for work, the top 3 receiving states are union territories. There is no prominent region which has in-migration, the states in the graph are from various parts of India.
+
+For the receiving states of migrants who move for marriage, interestingly, the top 3 states are the same states that fell among the top 10 in those who moved out for work. There is also a significant overlap in the states that sent out migrants due to marriage and also receive migrants due to marriage- Assam, Rajasthan, West Bengal and Haryana. It may be the case that many people move between Haryana and Rajasthan since they are neighbouring states. Similary, since one of the neighbouring states to Assam is West Bengal, more people between the two due to marriage.
+
+```{r}
+in_w<-nodes_w %>% arrange(desc(strength_in))%>%slice(1:10)
+ggplot(in_w, aes(fill=name,x=reorder(name,strength_in),y=strength_in))+ 
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values=Set,guide="none")+
+  coord_flip()+
+  geom_text(aes(label=round(strength_in,digits=2)),position=position_stack(vjust=0.5))
+
+
+in_m<-nodes_m %>% arrange(desc(strength_in))%>%slice(1:10)
+ggplot(in_m, aes(fill=name,x=reorder(name,strength_in),y=strength_in))+ 
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values=Set,guide="none")+
+  coord_flip()+
+  geom_text(aes(label=round(strength_in,digits=2)),position=position_stack(vjust=0.5))
+```
+
+# Eigenvector centrality, Constraint, Diameter
+
+The following tables show the eigenvector centralities and constraints for the nodes of the 2 networks. The diameters for the two networks has also been provided.
+
+However, since the data did not record dynamic migration, that is the same person moving to more than one state in the time frame studied, the indirect connections between each node are not significant/ they do not represent movement. Since the measures in this section depict how nodes are connected to nodes that are central, information flow between nodes that are indirectly connected and the distance between one node to the other, they do not give interpretable information for the case of the migrant networks in this study.
+
+```{r}
+nodes_w %>% select(name,eigen)%>%arrange(desc(eigen))
+nodes_m %>% select(name,eigen)%>%arrange(desc(eigen))
+nodes_w %>% select(name,cons)%>%arrange(desc(cons))
+nodes_m %>% select(name,cons)%>%arrange(desc(cons))
+diameter(mig_work_ig)
+farthest_vertices(mig_work_ig)
+sna::isolates(mig_work_stat)
+diameter(mig_mar_ig)
+farthest_vertices(mig_mar_ig)
+sna::isolates(mig_mar_stat)
+```
+
+# Community Identification
+
+For community identification, I decided to use the walktrap community detection and spinglass methods. Both of these algorithms support weights, however, the directions of edges are ignored.
+
+## Migration due to work
+
+The communities identified by the 2 algorithms differ vastly for migrants who move for work. The modularity scores (3.1 e-16 and 0.006) indicate that the communities are significantly different from what would be expected in a random network.
+
+### Walktrap Community Detection
+
+Since this algorithm utilises random walks and we have established that in this network, almost every node is connected to all other nodes, this results in only one community containing all the nodes being detected.
+
+```{r width=20,height=12}
+set.seed(20)
+#Run clustering algorithm: walktrap
+workto.wt<-walktrap.community(mig_work_ig,weights=NULL)
+#Inspect community membership
+igraph::groups(workto.wt)
+#add community membership as a vertex attribute
+nodes_w$comm.wt<-workto.wt$membership
+#plot the network with community coloring
+plot(workto.wt,mig_work_ig)
+#modularity
+mod_w<-modularity(workto.wt)
+mod_w
+```
+
+### Spinglass
+
+This algorithm has identified 4 different clusters. Each cluster contains states from a variety of regions, illustrating that people are willing to move farther distances for employment.
+
+```{r}
+set.seed(20)
+#Run clustering algorithm: spinglass
+workto.spin<-spinglass.community(mig_work_ig)
+#Inspect community membership
+igraph::groups(workto.spin)
+#add community membership as a vertex attribute
+nodes_w$comm.spin<-workto.spin$membership
+#plot the network with community coloring
+plot(workto.spin,mig_work_ig)
+#collect modularity scores to compare
+mod_spin_w<-modularity(workto.spin)
+mod_spin_w
+```
+
+## Migration due to marriage
+
+The communities identified by the 2 algorithms are quite similar for migrants who move for marriage. The modularity scores (0.16 and 0.09) indicate that the communities are significantly different from what would be expected in a random network.
+
+The walktrap community detection algorithm identified 5 clusters whereas the spinglass algorithm identified 4 clusters. The clusters identified by these two algorithms mostly had states confined to a particular region of India, demonstrating that people do not move farther distances for marriage in comparison to those who moved for work.
+
+The first cluster for both algorithms consist of states from the Southern region of India in addition to the island/union territory- Andaman and Nicobar Islands. Similarly clusters 4 in walktrap and 3 in spinglass have states from the Northern region, with the exception of Puducherry (located in the South) in the cluster identified by Spinglass.
+
+While there were some differences in states, clusters 3 in walktrap and 4 in spinglass represent the North-eastern region whereas clusters 2 for both the algorithms consist of states from Central/Western India.
+
+### Walktrap Community Detection
+
+```{r width=20,height=12}
+set.seed(20)
+#Run clustering algorithm: walktrap
+marto.wt<-walktrap.community(mig_mar_ig,weights=NULL)
+#Inspect community membership
+igraph::groups(marto.wt)
+#add community membership as a vertex attribute
+nodes_m$comm.wt<-marto.wt$membership
+#plot the network with community coloring
+plot(marto.wt,mig_mar_ig)
+#modularity
+mod_m<-modularity(marto.wt)
+mod_m
+```
+
+### Spinglass
+
+```{r}
+set.seed(20)
+#Run clustering algorithm: spinglass
+marto.spin<-spinglass.community(mig_mar_ig)
+#Inspect community membership
+igraph::groups(marto.spin)
+#add community membership as a vertex attribute
+nodes_m$comm.spin<-marto.spin$membership
+#plot the network with community coloring
+plot(marto.spin,mig_mar_ig)
+#collect modularity scores to compare
+mod_spin_m<-modularity(marto.spin)
+mod_spin_m
+```
+
+# Network correlation
+
+I chose to use the QAP test since both my networks had the same nodes but were created with different tie content.
+
+The plot depicts that the differences between the two networks is statistically significant. Moreover, the negative correlation further strengthens the dissimilarity between the migration network for work and migration network for marriage.
+
+```{r}
+gcor(mig_work_stat,mig_mar_stat)
+qap<-qaptest(list(mig_work_stat,mig_mar_stat),gcor,g1=1,g2=2)
+qap
+
+plot(qap, xlim=c(min(qap$dist)-.02, qap$testval+.02))
+abline(v=qap$testval, col="red")
+```
+
+# Conclusion
+
+To summarise, there is a difference observed for the patterns of movement for work and marriage. For the threshold considered in the project (at least a proportion of 20%), it is clear that more people move for work than for marriage. Moreover, people moving for work are open to move to multiple geographic regions whereas people moving for marriage mostly move within the same geographic region. The major region of out migration for work was observed to be parts of North and East India but no such major region of in migration for work was found. Finally, several of the top sending states of migrants due to marriage were simultaneously top receiving states of migrants due to marriage.
+
+In future research, this analysis can be extended to the other reasons for migration present in the Census dataset, including but not limited to movement for education, business and within the household. Additionally, it may be interesting to observe if the patterns of movement for a particular reason has changed over years, by incorporating Census data from various time periods. It would also be helpful to study trends in Census data in the 2020-2030 decade when it is released.
+
+# References
+
+-   Bhardwaj, A., & Batra, S. (2022, July 26). *No census 2021 in 2022 either - govt 'puts exercise on hold, timeframe not yet decided'.*ThePrint.https://theprint.in/india/no-census-2021-in-2022-either-govt-puts-exercise-on-hold-timeframe-not-yet-decided/1055772/
+
+-   Government of India. (n.d.).*Drop-in-article on census - no.8 (migration).*\
+    https://censusindia.gov.in/nada/index.php/catalog/40447
+
+-   Lumen Learning. (n.d.). *Systems of Social Stratification*. https://courses.lumenlearning.com/wm-introductiontosociology/chapter/systems-of-social-stratification/
+
+-   Office of the Registrar General India. (2021). D-03: Migrants within the State/UT by place of last residence, duration of residence and reason of migration - 2011.\
+    \[India\]. https://censusindia.gov.in/census.website/data/census-tables
+
+-   Sahgal,N., Evans, J., Salazar, A.M., Starr, K.J. & Corichi, M. (2021, June 29). *4. attitudes about caste*. Pew Research Center's Religion & Public Life Project. https://www.pewresearch.org/religion/2021/06/29/attitudes-about-caste/
