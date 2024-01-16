@@ -1,0 +1,275 @@
+---
+title: "Structural Topic Modelling on Gender in Sports News"
+author: "Mekhala Kumar"
+date: "12/15/2022"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-tools: true
+categories:
+  - MekhalaKumar
+  - Olympics2020
+  - GenderandSports
+  - StructuralTopicModelling
+  - BlogPost5
+---
+
+In this post, I conducted Structural Topic Modelling with the help of the stm package.
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+library(tidyverse)
+library(quanteda)
+library(readtext)
+library(striprtf)
+library(corpustools)
+library(quanteda.textplots)
+library(readr)
+library(topicmodels)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(tm)
+library(stm)
+```
+
+## Reading in the dataset
+
+I had to make a few changes to the dataset to use it for structural topic modelling, so I read in the data file that was present without preprocessing and repeated preprocessing after modifying the data.
+
+```{r}
+dfnews<- readRDS(file = "_data/CleanData.rds")
+```
+
+## Tidying and modifying the dataset
+
+In order to use structural topic modelling, I required a variable that I could use for prevalence. Since my research question was to check for gender bias in newspapers, using the Tags metadata, I created a new column which classified the article as related to women's sports or men's sports. Since the Tags included multiple categories, I checked whether each row had the term MEN'S SPORTS or WOMEN'S SPORTS. I faced an issue while filtering out as while using regular expressions, the tags with 'women' were also removed when I was trying to remove only the tags with 'men'. Hence, I first replaced the term Women's with Nari (Hindi word for woman) in order to avoid filtering errors due to regular expressions.
+
+```{r}
+dfnews_edit <- dfnews %>% 
+  mutate_at(c('Tags'),funs(str_replace(., "WOMEN'S", "NARI")))
+#Women's sports - removes all the tags which have the word men's and then looks for all the columns that have the word women
+ woman <- dfnews_edit %>% 
+   filter(!grepl("MEN'S", Tags))%>%
+    filter(grepl("NARI", Tags))
+ #woman
+ 
+wom1<-woman%>%
+  mutate(Classification="Women")
+#wom1
+dim(wom1)
+
+#Men's sports
+men <- dfnews_edit %>% 
+   filter(!grepl("NARI", Tags))%>%
+    filter(grepl("MEN'S", Tags))
+#men
+men1<-men%>%
+  mutate(Classification="Men")
+#men1
+dim(men1)
+#Men's sports and women's sports combined
+both<-dfnews_edit%>%
+  filter(grepl("MEN'S.*NARI|NARI.*MEN'S", Tags))
+#both
+dim(both)
+both<-both%>%
+  mutate(Classification="MenAndWomen")
+#both
+
+#sanity check
+remaining<-dfnews_edit %>% 
+   filter(!grepl("NARI|MEN'S|MEN'S.*NARI|NARI.*MEN'S", Tags))
+#remaining
+dim(remaining)
+```
+
+## Creation of dataset to be used for structural topic modelling
+
+There were some observations which contained metadata pertaining to both men's and women's sports. However, since I wanted to analyse whether there were differences between the aspects covered in sports for men and women, I did not keep the observations which had both the tags. I also realised that some of the articles were repeated so I filtered out the duplicates. With these changes, the dataset was reduced to 468 articles.
+
+```{r}
+dim(both)
+both1<-both %>% distinct(body, .keep_all = TRUE)
+dim(both1)
+
+df_with3<-rbind(wom1,men1,both)
+dim(df_with3)
+df_with3<-df_with3%>%
+          select(!Tags)
+df_with3<-df_with3 %>% distinct(body, .keep_all = TRUE)
+dim(df_with3)
+#saveRDS(df_with3, file = "Data/FilesClassification.rds")
+#saveRDS(df_with3, file = "Data/FilesClassificationNoDuplicates.rds")
+```
+
+```{r}
+df_final<-rbind(wom1,men1)
+df_final<-df_final%>%
+          select(!Tags)
+dim(df_final)
+df_final<-df_final %>% distinct(body, .keep_all = TRUE)
+dim(df_final)
+```
+
+## Preprocessing
+
+The same steps as done in previous blog posts were conducted for preprocessing. \# Creating the corpus
+
+```{r}
+#Converting to corpus
+newspaper_corpus <- corpus(df_final,text_field = "body")
+head(newspaper_corpus)
+newspaper_corpus_summary <- summary(newspaper_corpus)
+head(newspaper_corpus_summary)
+newspaper_corpus_summary$Tokens
+```
+
+Checking for metadata, creating tokens, removing punctuation and removing stopwords.
+
+```{r}
+#docvars(newspaper_corpus)
+
+newspaper_tokens <- tokens(newspaper_corpus)
+head(newspaper_tokens)
+
+newspaper_tokens <- tokens(newspaper_tokens ,
+                                    remove_punct = T)
+head(newspaper_tokens)
+
+withoutstopwords_news<- tokens_select(newspaper_tokens, 
+                    pattern = stopwords("en"),
+                    select = "remove")
+print(withoutstopwords_news)
+head(withoutstopwords_news)
+#as.character(withoutstopwords_news)
+```
+
+## Conversion to document feature matrix
+
+```{r}
+news_dfm_stm <- dfm(tokens(withoutstopwords_news))
+news_dfm_stm <- dfm_remove(news_dfm_stm, c("said","also","says","can","just"), verbose = TRUE)
+```
+
+I recoded the classification to be 1 for Women and 0 for Men to be used as the prevalence for the model.
+
+```{r}
+
+df_final<- mutate(df_final,Gender=recode(Classification,"Women"="1","Men"="0"))
+df_final$Gender<-as.numeric(df_final$Gender)
+```
+
+## Choosing K
+
+I selected 25 topics based on the semantic coherence.
+
+```{r}
+differentKs <- searchK(news_dfm_stm,
+                       K = c(5, 10,15, 25,50),
+                       prevalence = ~ Gender,
+                       N = floor(0.1 * 468),
+                       data = df_final,
+                       max.em.its = 100,
+                       init.type = "Spectral")
+
+plot(differentKs)
+```
+
+## Structural Topic model
+
+```{r, include=FALSE}
+k <- 25
+news_stm <- stm(news_dfm_stm,
+               K = k,
+               prevalence = ~ Gender,
+               data = df_final,
+               max.em.its = 100,
+               seed = 1234,
+               init.type = "Spectral")
+
+```
+
+## Labels for each topic
+
+Since it is difficult to interpret using just the labels, I have employed a few different methods in the following sections.
+
+```{r}
+labelTopics(news_stm)
+```
+
+## Top Topics
+
+From this graph, it is clear that the top 3 topics all pertain to hockey. Other prominent topics seem to be regarding Mirabai Chanu winning the silver medal in weightlifting and Neeraj Chopra winning the gold medal in the Javelin Throw.
+
+```{r fig.height=7, fig.width=6}
+plot(news_stm, type = "summary",xlim=c(0,0.5))
+```
+
+## Top words in each topic
+
+The top 10 words for each topic were extracted and used in order to provide names for each topic.
+
+```{r}
+myTopicNames <- labelTopics(news_stm, n=10)$frex
+myTopicLabels <- rep(NA, k)
+for (i in 1:k){
+  myTopicLabels[i] <- paste(myTopicNames[i,], collapse = "_")
+}
+myTopicLabels
+topicNames<-c("1.HockeyDetails","2.CashPrizes","3.TableTennisWomen's","4.NotOlympicsRelated1","5.HockeyAwards","6.Archery&OtherSports","7.BadmintonSindhu","8.HockeyRewards","9.InternationalPlayers","10.Media","11.WrestlingandJavelinThrow (Men's)","12.NotOlympicsRelated2","13.HockeyInfo","14.HockeySchedule","15.AditiGolf","16.ShootingSport","17.HockeyCongratulatoryMessages","18.NotOlympicsRelated3","19.TableTennisMen's","20.CasteAndWomen'sHockey","21.KhelRatnaAward","22.HockeyDetails2,","23.MirabaiWeightlifting","24.BoxingLovlina","25.LPUStudentsatOlympics")
+```
+
+## Estimating the relationship between the topics and the metadata
+
+The graph below illustrates much more(or less) the topic is mentioned when the article is tagged as Women.\
+It does not give any insightful results because it shows that the sports that had women athletes in them were mentioned more when the article was tagged as women and sports that had men athletes were mentioned more when the article was tagged as men; which is obvious.
+
+```{r fig.height=7, fig.width=6}
+modelEffects <- estimateEffect(formula = 1:k ~ Gender,
+                               stmobj = news_stm,
+                               metadata = df_final)
+
+plot(modelEffects, covariate = "Gender", topics = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25), model = news_stm, method = "difference", cov.value1 = 1, cov.value2 = 0, xlab = "Men...Women", main = "Olympics Topics discussing Men's/Women's Sports", xlim = c(-0.2, 0.2), labeltype = "custom", custom.labels = c("1.HockeyDetails","2.CashPrizes","3.TableTennisWomen's","4.NotOlympicsRelated1","5.HockeyAwards","6.Archery&OtherSports","7.BadmintonSindhu","8.HockeyRewards","9.InternationalPlayers","10.Media","11.WrestlingandJavelinThrow (Men's)","12.NotOlympicsRelated2","13.HockeyInfo","14.HockeySchedule","15.AditiGolf","16.ShootingSport","17.HockeyCongratulatoryMessages","18.NotOlympicsRelated3","19.TableTennisMen's","20.CasteAndWomen'sHockey","21.KhelRatnaAward","22.HockeyDetails2,","23.MirabaiWeightlifting","24.BoxingLovlina","25.LPUStudentsatOlympics"))
+```
+
+## Correlation Plot
+
+The plot shows that none of the topics are correlated which was unexpected especially since many of the topics pertained to the Indian Hockey team.
+
+```{r}
+mod.out.corr <- topicCorr(news_stm,method = c("simple"), cutoff = 0.01, verbose = TRUE)
+plot(mod.out.corr)
+```
+
+## Structural Topic Modelling with Topical Content
+
+I added a topical content covariate to the structural topic model to check for differences in the words used. However, this model was taking a long time to run so I decided not to use it for the analysis.
+
+```{r}
+ContentNews <- stm(news_dfm_stm, K = 25, prevalence =~ Gender, content =~ Gender, max.em.its = 5, seed = 1234,data =df_final, init.type = "Spectral")
+labelTopics(ContentNews)
+```
+
+Although I will not be utilising this model, I was curious to see if there was a difference in the words used for each gender's sports event so I plotted the words for a few topics.There was no significant difference as the terms used for both pertained to information about the match or the medals won.
+
+```{r}
+plot(ContentNews, type = "summary",xlim=c(0,0.5))
+plot(ContentNews,type="perspectives", topics=1)
+plot(ContentNews,type="perspectives", topics=7)
+plot(ContentNews,type="perspectives", topics=17)
+```
+
+After running the structural topic model, I decided not to use this for my analysis because of the following reasons:
+
+1.  The model is not producing anything insightful because it provides the information that women who played particular sports are mentioned in women's section and vice versa, but the terms used to describe the events are not present.
+
+2\. This model becomes computationally expensive when a topical content covariate is added.\
+
+In my next blog post, I will be using LDA topic models on women's and men's corpora separately.
+
+Reference: Warin, T. (2020). Structural Topic Models: stm R package. https://warin.ca/shiny/stm/#section-the-structural-topic-model

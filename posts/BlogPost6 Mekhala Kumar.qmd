@@ -1,0 +1,485 @@
+---
+title: "Topic Modelling based on Gender Corpora in Sports News "
+author: "Mekhala Kumar"
+date: "12/19/2022"
+format:
+  html:
+    toc: true
+    code-copy: true
+    code-tools: true
+categories:
+  - MekhalaKumar
+  - Olympics2020
+  - GenderandSports
+  - LDATopicModelling
+  - BlogPost6
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+library(tidyverse)
+library(quanteda)
+library(readtext)
+library(striprtf)
+library(corpustools)
+library(quanteda.textplots)
+library(readr)
+library(topicmodels)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(tm)
+library(stm)
+```
+
+# Introduction
+
+Newspapers often reflect the gender biases and gender roles in society. Rao and Taboada found that English Canadian newspapers quote women more often in the Lifestyle, Entertainment, Arts and Healthcare categories and men more often in the Business, Sports and United States Politics (2021). Even within a field such as sports, the details of the sports events are provided for articles about men's sports while in women's sports articles, only women's achievements are focused upon. Similarly, Devinney et al. studied Mainstream English news articles, Mainstream Swedish articles and LGBTQ+ web content and found that feminine topics were linked to the private sphere and masculine topics were linked to the public sphere (2020).
+
+**Research aim : To understand whether there was a difference in the way Indian newspapers reported women's and men's sports during the Tokyo Olympics held in 2021.**
+
+# Data used in the project
+
+The LexisNexis database was used to collect articles from July 22 to August 9, 2021 (the time when the 2021 Olympics were held).\
+The data included articles from Hindustan Times, Times of India (Electronic Edition), Free Press Journal (India), The Telegraph (India), Indian Express, Mint, DNA, India Today Online, The Hindu and Economic Times (E-Paper Edition).\
+The key word searched was Olympics and filters including Men's Sports, Women's Sports, Sports Awards, Sports & Recreation, India and Newspapers were used.
+
+# Methodology
+
+The quanteda package was used for preprocessing. The corpora used were either the entire set of files or a subset depending on the model used. Punctuation and stopwords were removed from the corpora. Additionally, words such as Olympics, India and Tokyo were removed to derive more meaningful results.\
+Structural Topic Modelling and LDA Topic Modelling were employed using the stm and topicmodels packages respectively. For this, subsets of the dataset were utilised to create corpora. These corpora were made using the metadata which had classification tags such as sports, women's sports and men's sports. The articles were categorised as men's sports, women's sports or both.\
+For structural topic modelling, the corpus had 468 articles. However, the structural topic model did not produce anything insightful because it provided the information that women who played particular sports are mentioned more often in the women's section and vice versa. The terms used to describe the events were not present when the model was run.\
+Hence, the final model included Latent Dirichlet Allocation (LDA) topic models for the corpora separately by gender. Additionally there was one corpus used which included articles that included both the tags of women's and men's sports.\
+There were 191 articles in the men's sports corpora, 277 articles in the women's sports corpora and 148 articles in the corpora which had both men's and women's sports' articles.\
+For the LDA topic models and structural topic models, the search_K() function was used to determine the optimal number of topics.
+
+## Semantic Network
+
+The semantic network displayed here was made using 1128 articles.\
+I limited the document feature matrix to terms that appeared a least 15 times and in 25% of the documents. This consisted of 50 terms which I plotted.\
+Unsurprisingly, this shows that most of the articles discuss India in the Olympics (as Indian newspaper articles were used). One major theme that can be observed is the discussion of the hockey team- the men's team had placed third in over four decades hence marking history and was led by the captain Manpreet Singh. Other significant terms include medals and medal colours perhaps pertaining to victories by other Indian athletes; which are more clearly observed through the LDA topic models in the following sections.
+
+```{r}
+articles_dfm<-readRDS(file = "_data/News_DFMForSemNet.rds")
+```
+
+```{r}
+dfm_refined <- dfm_trim(articles_dfm, min_termfreq = 15)
+dfm_refined <- dfm_trim(dfm_refined, min_docfreq = .25, docfreq_type = "prop")
+
+fcm<- fcm(dfm_refined)
+dim(fcm)
+
+top_features <- names(topfeatures(fcm,50))
+fcm_refined <- fcm_select(fcm, pattern = top_features, selection = "keep")
+dim(fcm_refined)
+size <- log(colSums(fcm_refined))
+textplot_network(fcm_refined, vertex_size = size / max(size) * 3)
+```
+
+## Reading in the files for the LDA topic models
+
+```{r}
+df_All<-readRDS(file = "_data/FilesClassificationNoDuplicates.rds")
+df_All<-df_All %>% distinct(body, .keep_all = TRUE)
+```
+
+```{r}
+df_3<-df_All%>%split(df_All$Classification)
+df_Men<-df_3$Men
+dim(df_Men)
+df_Women<-df_3$Women
+dim(df_Women)
+df_Both<-df_3$MenAndWomen
+dim(df_Both)
+```
+
+## Preprocessing for each corpora
+
+Since the dataset was divided into 3 parts to be analysed separately, preprocessing for each part had to be conducted. Each dataframe was converted into a corpus and there was a check for metadata. After this, tokens were created, and punctuation and stopwords were removed.
+
+### Women's corpora
+
+```{r}
+corpus_w <- corpus(df_Women,text_field = "body")
+head(corpus_w)
+corpus_w_summary <- summary(corpus_w)
+head(corpus_w_summary)
+#corpus_w_summary$Tokens
+#docvars(corpus_w)
+
+corpus_w_tokens <- tokens(corpus_w)
+head(corpus_w_tokens)
+
+corpus_w_tokens <- tokens(corpus_w_tokens ,
+                                    remove_punct = T)
+head(corpus_w_tokens)
+
+corpus_w_tokens<- tokens_select(corpus_w_tokens, 
+                    pattern = stopwords("en"),
+                    select = "remove")
+head(corpus_w_tokens)
+```
+
+### Men's corpora
+
+```{r}
+corpus_m <- corpus(df_Men,text_field = "body")
+head(corpus_m)
+corpus_m_summary <- summary(corpus_m)
+head(corpus_m_summary)
+#corpus_m_summary$Tokens
+#docvars(corpus_m)
+
+corpus_m_tokens <- tokens(corpus_m)
+head(corpus_m_tokens)
+
+corpus_m_tokens <- tokens(corpus_m_tokens ,
+                                    remove_punct = T)
+head(corpus_m_tokens)
+
+corpus_m_tokens<- tokens_select(corpus_m_tokens, 
+                    pattern = stopwords("en"),
+                    select = "remove")
+head(corpus_m_tokens)
+```
+
+### Both men and women
+
+```{r}
+corpus_b <- corpus(df_Both,text_field = "body")
+head(corpus_b)
+corpus_b_summary <- summary(corpus_b)
+head(corpus_b_summary)
+#corpus_b_summary$Tokens
+#docvars(corpus_b)
+
+corpus_b_tokens <- tokens(corpus_b)
+head(corpus_b_tokens)
+
+corpus_b_tokens <- tokens(corpus_b_tokens ,
+                                    remove_punct = T)
+head(corpus_b_tokens)
+
+corpus_b_tokens<- tokens_select(corpus_b_tokens, 
+                    pattern = stopwords("en"),
+                    select = "remove")
+#print(corpus_b_tokens)
+head(corpus_b_tokens)
+```
+
+### Creating document feature matrices
+
+```{r}
+dfm_women <- dfm(tokens(corpus_w_tokens))
+dfm_women <- dfm_remove(dfm_women, c("said","also","says","can","just"), verbose = TRUE)
+
+dfm_men <- dfm(tokens(corpus_m_tokens))
+dfm_men<- dfm_remove(dfm_men, c("said","also","says","can","just"), verbose = TRUE)
+
+dfm_both<- dfm(tokens(corpus_b_tokens))
+dfm_both <- dfm_remove(dfm_both, c("said","also","says","can","just"), verbose = TRUE)
+```
+
+## Search k for each corpora
+
+The number of optimal topics was checked for each corpora. \### For women Based on semantic coherence, the number of topics for the women's corpora was chosen as 9.
+
+```{r}
+diffKwomen <- searchK(dfm_women,
+                       K = c(5,6,7,8,9,10),
+                       N = floor(0.1 * 277),
+                       data = df_Women,
+                       max.em.its = 1000,
+                       init.type = "Spectral",
+                       verbose=FALSE)
+
+plot(diffKwomen)
+```
+
+### For men
+
+Based on semantic coherence, the number of topics for the men's corpora was chosen as 7.
+
+```{r}
+diffKmen <- searchK(dfm_men,
+                       K = c(5,6,7,8,9,10),
+                       N = floor(0.1 * 191),
+                       data = df_Men,
+                       max.em.its = 1000,
+                       init.type = "Spectral",
+                       verbose=FALSE)
+
+plot(diffKmen)
+```
+
+### For both
+
+Based on semantic coherence, the number of topics for the corpora with both men's and women's articles was chosen as 8.
+
+```{r}
+diffKboth <- searchK(dfm_both,
+                       K = c(5,6,7,8,9,10),
+                       N = floor(0.1 * 148),
+                       data = df_Both,
+                       max.em.its = 1000,
+                       init.type = "Spectral",
+                       verbose=FALSE)
+
+plot(diffKboth)
+```
+
+# Interpretation of the models
+
+# LDA models
+
+### Topic models for women's corpora
+
+```{r}
+dfm_women <- dfm_remove(dfm_women, c("olympics","olympic","india","indian","tokyo","sports","#tokyo2020","2020","2021","india's","games","game","match","will","day"), verbose = TRUE)
+tidy_w<-tidy(dfm_women)
+tidy_w
+
+women_dtm <- tidy_w %>%
+  cast_dtm(document, term, count)
+women_dtm
+```
+
+The topics can be classified as follows:
+
+Topic 1- Hockey match details
+
+Topic 2- Mirabai Chanu placing second in weightlifting, hockey
+
+Topic 3- Hockey and weightlifting
+
+Topic 4- Lovlina Borgohain placing third in boxing
+
+Topic 5- PV Sindhu placing third in badminton
+
+Topic 6- Casteist remarks against women's hockey team
+
+Topic 7- Information about Simon Biles and importance of mental health
+
+Topic 8- Aditi Ashok's performance in golf and medals mentioned from other sports
+
+Topic 9- Rewards offered to the hockey teams
+
+Most of the topics in the women's sports corpora are about the Indian women athletes who won medals at the Olympics or were in the final rounds. Other than this, there was an incident where casteist remarks about Indian women hockey players were made after the women's team had lost a semifinal which is reflected in topic 6. Finally, when it came to international athletes and events, the only topic found was about Simon Biles and her decision to leave the Olympics early due to mental health reasons.
+
+```{r fig.height=14, fig.width=12}
+lda_women<- LDA(women_dtm, k = 9, control = list(seed = 2345))
+lda_women
+
+#extracting per-topic-per-word probabilities
+topics_women <- tidy(lda_women, matrix = "beta")
+topics_women
+
+#Finding the top 20 terms
+top_20_w <- topics_women %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 20) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_20_w%>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()+
+  labs(title = "Topic Modelling for the Women's Corpora")
+```
+
+Since topics 2 and 3 both have words related to weightlifting and hockey I checked for the words with the greatest difference in the 2 topics. The words that are more common in topic 2 include world, chanu and medal whereas the words in topic 3 include hockey, win, team, time, mirabai, weightlifting and khan. This is indicative that topic 2 might have more information specific to weightlifting and topic 3 is a mixture of the two sports.
+
+```{r}
+beta_2_3<- topics_women %>%
+  mutate(topic = paste0("topic", topic))%>%
+  filter(topic=="topic2"|topic=="topic3")%>%
+  pivot_wider(names_from =topic, values_from = beta)%>% 
+  filter(topic2 > .006| topic3 > .006) %>%
+  mutate(log_ratio = log2(topic2/ topic3))
+
+beta_2_3%>%select(log_ratio)%>%max()
+beta_2_3%>%select(log_ratio)%>%min()
+
+
+new<-beta_2_3 %>%
+  group_by(direction = log_ratio > 0) %>%
+  top_n(10, abs(log_ratio)) %>%
+  ungroup() %>%
+  mutate(term = reorder(term, log_ratio)) %>%
+  ggplot(aes(term, log_ratio)) +
+  geom_col() +
+  labs(y = "Log2 ratio of beta in topic 2 / topic 3",title="Words with the GreatestDifference in Topics 2and3 in the Women'sCorpora") +
+  coord_flip()
+
+new
+#ggplotly(new)
+```
+
+### Topic models for men's corpora
+
+```{r}
+dfm_men <- dfm_remove(dfm_men, c("olympics","olympic","india","indian","tokyo","sports","#tokyo2020","2020","2021","india's","games","game","match","will","day"), verbose = TRUE)
+tidy_m<-tidy(dfm_men)
+tidy_m
+
+men_dtm <- tidy_m %>%
+  cast_dtm(document, term, count)
+men_dtm
+```
+
+The topics can be classified as follows:
+
+Topic 1- Hockey match details
+
+Topic 2- Hockey rewards
+
+Topic 3- Hockey and cash awards
+
+Topic 4- Hockey, Shooting 10 m air pistol, Tennis
+
+Topic 5- More details about hockey, related to the coach
+
+Topic 6- Archery, Hockey, multiple Olympic winners from the same university
+
+Topic 7- Many of the medal winners- PV Sindhu: Bronze medal in Badminton, Bajrang Punia: Bronze medal in Wrestling, Neeraj Chopra: Gold medal in Javelin throw, Ravi Kumar Dahiya: Bronze medal in Wrestling\
+
+Most of the topics are regarding the men's hockey team's victory, including the details of the match and people's reaction to the same. Other people discussed in the corpora as well are medallists.This suggests that more than the gender aspect, perhaps the Indian newspapers focused on the athletes who achieved victories. Moreover, even though this was the men's corpora, the female Badminton player PV Sindhu was among the top terms in topic 7. This shows that the tags present in the metadata were not completely accurate.
+
+```{r fig.height=14, fig.width=12}
+lda_men<- LDA(men_dtm, k = 7, control = list(seed = 2345))
+lda_men
+
+#extracting per-topic-per-word probabilities
+topics_men <- tidy(lda_men, matrix = "beta")
+topics_men
+
+#Finding the top 20 terms
+top_20_m <- topics_men %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 20) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_20_m%>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()+
+  labs(title = "Topic Modelling for the Men's Corpora")
+```
+
+Since topics 2 and 3 both have words related to hockey and rewards. I checked for the words with the greatest difference in the 2 topics. The words that are more common in topic 2 include men's,hockey, team and medal whereas the words in topic 3 include bronze, rs (rupees, the Indian currency), singh, contingent, athletes and village. This is indicative that topic 2 might have more information specific to the details of hockey and the medal whereas the other topic has miscellaneous information such as cash prizes and about the captain of the hockey team.
+
+```{r}
+beta_2_3<- topics_men %>%
+  mutate(topic = paste0("topic", topic))%>%
+  filter(topic=="topic2"|topic=="topic3")%>%
+  pivot_wider(names_from =topic, values_from = beta)%>% 
+  filter(topic3 > .006| topic3> .006) %>%
+  mutate(log_ratio = log2(topic2/ topic3))
+
+beta_2_3%>%select(log_ratio)%>%max()
+beta_2_3%>%select(log_ratio)%>%min()
+
+new2<-beta_2_3 %>%
+  group_by(direction = log_ratio > 0) %>%
+  top_n(15, abs(log_ratio)) %>%
+  ungroup() %>%
+  mutate(term = reorder(term, log_ratio)) %>%
+  ggplot(aes(term, log_ratio)) +
+  geom_col() +
+  labs(y = "Log2 ratio of beta in topic 2/ topic 3",title="Words with the Greatest Difference in Topics 2 and 3 in the Men's Corpora") +
+  coord_flip()
+
+new2
+#ggplotly(new2)
+```
+
+### Topic models for corpora with both men and women
+
+```{r}
+dfm_both <- dfm_remove(dfm_both, c("olympics","olympic","india","indian","tokyo","sports","#tokyo2020","2020","2021","india's"), verbose = TRUE)
+tidy_b<-tidy(dfm_both)
+tidy_b
+
+both_dtm <- tidy_b %>%
+  cast_dtm(document, term, count)
+both_dtm
+```
+
+The topics can be classified as follows:
+
+Topic 1- Hockey, Tennis and Table Tennis
+
+Topics 2 and 3- No clear topic can be distinguished
+
+Topic 4- Odisha (Indian state) Government's rewards for Hockey players
+
+Topic 5- Hockey details and rewards
+
+Topic 6- Reactions to the hockey team's victory
+
+Topic 7- Neeraj Chopra's achievement in Javelin throw and receipt of highest sporting honour in India
+
+Topic 8- Badminton and badminton player PV Sindhu
+
+There is not much difference seen in this corpora when compared to the other two. Aspects of hockey remain to be common across multiple topics. The other prominent sports players that stood out in this corpora were PV Sindhu (female badminton player) and Neeraj Chopra (male track and field athlete) who won the bronze and gold medals respectively.
+
+```{r fig.height=14, fig.width=12}
+lda_both<- LDA(both_dtm, k = 8, control = list(seed = 2345))
+lda_both
+
+#extracting per-topic-per-word probabilities
+topics_both <- tidy(lda_both, matrix = "beta")
+topics_both
+
+#Finding the top 20 terms
+top_20_b <- topics_both%>%
+  group_by(topic) %>%
+  slice_max(beta, n = 20) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_20_b%>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()
+```
+
+# Conclusion
+
+To summarise, there was no difference in the language used to describe women's and men's sports. Most of the athletes that were mentioned in the Indian newspapers had won medals or progressed to the final rounds of their respective sports. However, the modelling allowed us to see the popular aspects that were discussed in India during the Olympics, the most popular being the victory of the Indian men's hockey team. There were various features regarding hockey that were covered by the media including details of the matches, awards and people's reactions to the Indian team winning. In conclusion, there was no difference in the way that the sports were reported for men and women but an interesting find was that the media mainly focused on the sports players who won medals.\
+One of the limitations was that the classification was not proper in metadata, there were a few articles where women's sports were labelled as men's sports and vice versa. Additionally, another limitation was that a few of the duplicate articles could not be removed even after using the distinct function. This may have caused a few of the words to seem to appear more often than they did in the topics.\
+Future research can incorporate more categories beyond sports and a longer time period in order to determine whether a gender bias in Indian newspapers exists.
+
+# References
+
+Devinney,H., Björklund,J. & Björklund,H.(2020). Semi-Supervised Topic Modeling for Gender Bias Discovery in English and Swedish. Proceedings of the Second Workshop on Gender Bias in Natural Language Processing, 79-92.
+
+\
+Nexis Data Lab (2022). Olympics. Retrieved October 24, 2022,https://advance.lexis.com/nexisdatalabhome/? pdmfid=1534561&crid=7e8f5fed-48c5-45a3-a2dfbd9438b5d050&ecomp=zd54k&prid=6f411be1-3913-4a48-95be6a5c4d8b2367 https://aclanthology.org/2020.gebnlp-1.8
+
+\
+Grün, B., Hornik, K., Blei , D. M., Lafferty , J. D., Phan, X.-H., Matsumoto, M., Nishimura, T., & Cokus, S. (2022, December 6). topicmodels: Topic Models. The Comprehensive R Archive Network. https://cran.r-project.org/web/packages/topicmodels/
+
+R Core Team. (2022). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL http://www.R-project.org/.
+
+\
+Rao P and Taboada M (2021). Gender Bias in the News: A Scalable Topic Modelling and Visualization Framework. Front. Artificial Intelligence 4:664737. doi: 10.3389/frai.2021.66473
+
+\
+Roberts, M., Stewart, B., Tingley, D., & Benoit , K. (2022, October 14). STM: Estimation of the structural topic model.The Comprehensive R Archive Network.https://cran.r-project.org/web/packages/stm/stm.pdf
+
+\
+Silge,J. & Robinson,D. (2017).Text Mining with R: A Tidy Approach. O'Reilly Media. https://www.tidytextmining.com/topicmodeling.html
