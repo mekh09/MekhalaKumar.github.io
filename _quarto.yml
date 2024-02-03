@@ -9,6 +9,8 @@ website:
       - href: index.qmd
         text: Home
       - ProjectsinR.qmd
+      - posters.qmd
+      - Visualizations.qmd
 
 format:
   html:

@@ -1,0 +1,24 @@
+---
+title: "Tableau Visualizations"
+---
+
+During my internship at WageIndicator Foundation, I collaborated with classmates to create various visualizations. The links to the same are provided below:
+
+[Satisfaction with pay](https://wageindicator.org/salary/Salarycheckers/when-satisfied-with-pay)\
+Used STATA to clean large dataset on salary survey conducted by WageIndicator Foundation (\~280,000 observations). Worked with data of 10 countries and utilized bar plots and scatter plots to analyze how job promotion and firm size correlate to job satisfaction.
+
+[Food webshops across the world](https://wageindicator.org/salary/living-wage/database-access/food-web-shops-around-the-world)
+
+Collected data about food prices through online grocery stores. This data was also used to observe whether food is more expensive online or whether COVID-19 impacted prices. The popular grocery stores and their type(international,local,etc) were displayed through a map visualization.
+
+[Web traffic across WageIndicator sites](https://wageindicator.org/about/news/overview-wageindicator-newsletters/web-traffic-national-wageindicator-websites-2012-2019)  
+
+Through Google Analytics, extracted monthly and yearly website visits data for the country specific WageIndicator websites and displayed the results through line graphs in a dashboard.
+
+[Comparison of Living Wages in Countries by Different Organizations](https://wageindicator.org/salary/living-wage/living-wage-comparison-wageindicator-versus-global-living-wage-coalition-and-asian-floor-wage-a-study)  
+
+Compared living wage data collected by Asia Floor Wage, Global Wage World Coalition and WageIndicator Foundation and provided bar charts and maps to depict differences in the living wage estimated.
+
+[Traffic, Data and Income](https://lookerstudio.google.com/u/1/reporting/d15e9cec-c6f5-4860-ad60-090249305c57/page/4U6PB)
+
+This was a Looker Studio report that provided information about the website visits, salary surveys completed, effectiveness of social media campaigns on Facebook in making people fill salary surveys and regarding the output of work done by 2020 Summer Interns at FLAME University.

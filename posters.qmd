@@ -1,0 +1,23 @@
+---
+title: "Papers and Posters"
+listing:
+  contents: posterspapers
+  sort: "date desc"
+  type: default
+  categories: true
+---
+
+### Poster Presentations
+
+[Group Project on Menstrual Awareness and Period Poverty Perception](posts/posterspapers/PeriodPovertyGroup.pdf)\
+[Exploring the impact of heavy metals on depression](posts/posterspapers/ky_ml_poster.pdf)
+
+### Papers
+
+[Effects of Public Transit, Walkability and Vehicle Ownership on Quality of Life](posts/posterspapers/MekhalaKumar_790Q_FinalPaper.pdf)
+
+[Public Opinion Regarding Prescription Drug Costs](posts/posterspapers/MekhalaKumar_Memo.pdf)
+
+### Undergraduate Dissertation
+
+[Tracing more than a century of migration to major cities of India from the Census records](posts/posterspapers/Dissertation.pdf)
