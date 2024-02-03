@@ -5,6 +5,11 @@ date: "2023-12-15"
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
+categories:
+  - Migration
+  - Reasons for Migration
+  - India
+  - Network Analysis
 ---
 
 ```{r setup, include=FALSE}
