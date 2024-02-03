@@ -16,6 +16,8 @@ listing:
 
 [Effects of Public Transit, Walkability and Vehicle Ownership on Quality of Life](posts/posterspapers/MekhalaKumar_790Q_FinalPaper.pdf)
 
+[Factors affecting Out of Pocket Health Expenditure](posts/posterspapers/FinalProject_OrdinalRegressionwithSplines.pdf)
+
 [Public Opinion Regarding Prescription Drug Costs](posts/posterspapers/MekhalaKumarMemo.pdf)
 
 ### Undergraduate Dissertation
