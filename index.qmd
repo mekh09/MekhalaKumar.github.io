@@ -1,6 +1,6 @@
 ---
 title: "Mekhala Kumar"
-image: "mekhalapic.JPG"
+image: "MekhalaKumar.JPG"
 about: 
   template: trestles
   image-width: 15em
