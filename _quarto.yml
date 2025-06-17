@@ -8,7 +8,7 @@ website:
     left:
       - href: index.qmd
         text: Home
-      - href:ProjectsinR.qmd
+      - href: ProjectsinR.qmd
         text: Projects in R
       - href: posters.qmd
         text: Papers and Posters
