@@ -11,6 +11,7 @@ website:
       - ProjectsinR.qmd
       - posters.qmd
       - Visualizations.qmd
+      - newsletters.qmd
 
 format:
   html:
