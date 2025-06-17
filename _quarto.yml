@@ -6,12 +6,12 @@ website:
   title: "Mekhala Kumar"
   navbar:
     left:
-      - href: index.qmd
+      - href: index.html
         text: Home
-      - ProjectsinR.qmd
-      - posters.qmd
-      - Visualizations.qmd
-      - newsletters.qmd
+      - ProjectsinR.html
+      - posters.html
+      - Visualizations.html
+      - newsletters.html
 
 format:
   html:
