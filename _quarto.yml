@@ -8,9 +8,14 @@ website:
     left:
       - href: index.qmd
         text: Home
-      - ProjectsinR.qmd
-      - Visualizations.qmd
-      - newsletters.qmd
+      - href:ProjectsinR.qmd
+        text: Projects in R
+      - href: posters.qmd
+        text: Papers and Posters
+      - href: Visualizations.qmd
+        text: Tableau Visualizations
+      - href: newsletters.qmd
+        text: Newsletters
 
 format:
   html:
