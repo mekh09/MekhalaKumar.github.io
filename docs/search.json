@@ -684,5 +684,12 @@
     "title": "Tableau Visualizations",
     "section": "",
     "text": "Satisfaction with pay\nUsed STATA to clean large dataset on salary survey conducted by WageIndicator Foundation (~280,000 observations). Worked with data of 10 countries and utilized bar plots and scatter plots to analyze how job promotion and firm size correlate to job satisfaction.\nFood webshops across the world\nCollected data about food prices through online grocery stores. This data was also used to observe whether food is more expensive online or whether COVID-19 impacted prices. The popular grocery stores and their type(international,local,etc) were displayed through a map visualization.\nWeb traffic across WageIndicator sites  \nThrough Google Analytics, extracted monthly and yearly website visits data for the country specific WageIndicator websites and displayed the results through line graphs in a dashboard.\nComparison of Living Wages in Countries by Different Organizations  \nCompared living wage data collected by Asia Floor Wage, Global Wage World Coalition and WageIndicator Foundation and provided bar charts and maps to depict differences in the living wage estimated.\nTraffic, Data and Income\nThis was a Looker Studio report that provided information about the website visits, salary surveys completed, effectiveness of social media campaigns on Facebook in making people fill salary surveys and regarding the output of work done by 2020 Summer Interns at FLAME University."
+  },
+  {
+    "objectID": "newsletters.html",
+    "href": "newsletters.html",
+    "title": "Newsletters",
+    "section": "",
+    "text": "Biden and Age\nLed ideation and text analysis of voter concerns about US presidential candidates’ age; contributed to writing and analysis.\nYounger Voters and the Supreme Court\nDesigned survey questions with the team to capture voters under 40’s perceptions of the US Supreme Court and analyzed responses related to the 2024 homelessness ruling (which banned sleeping public places). Played a primary role in analysis and writing.\nWorked jointly with team members on analysis and content for these newsletters related to key events in Summer 2024 affecting the US presidential race:\nCan Biden Still Win\nEffects of the Mid-Summer Switch Up\nA Summer for the Ages"
   }
 ]
