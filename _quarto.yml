@@ -11,7 +11,8 @@ website:
       - ProjectsinR.html
       - posters.html
       - Visualizations.html
-      - newsletters.html
+      - href: newsletters.html
+        text: Newsletters
 
 format:
   html:
