@@ -1,6 +1,6 @@
 ---
 title: "Mekhala Kumar"
-image: "mekhalapic.JPG"
+image: "MekhalaKumar.JPG"
 about: 
   template: trestles
   image-width: 15em
@@ -18,5 +18,5 @@ about:
 ---
 
 ::: {#ppc}
-Hi, I am Mekhala Kumar! <br> I am passionate about utilizing data in order to solve social issues.My research interests include migration, public health, and gender economics.<br> My background includes a Social Data Science master's degree from the University of Massachusetts Amherst and an undergraduate degree in Applied Mathematics and Economics from FLAME University. <br> Additionally, I have been practicing Karate for over a decade and hold a second DAN black belt, which has enhanced my leadership and organization skills. <br> This site contains the different projects I have undertaken. Feel free to contact me if you have any questions.
+Hi, I am Mekhala Kumar! <br> I am passionate about utilizing data in order to solve social issues.My research interests include migration, public health, and gender economics.<br> I have a year of work experience in public opinion research, where I analyzed voter attitudes and translated findings into actionable insights for clients.<br>My academic background includes a Social Data Science master's degree from the University of Massachusetts Amherst and an undergraduate degree in Applied Mathematics and Economics from FLAME University. <br> Additionally, I have been practicing Karate for over a decade and hold a second DAN black belt, which has enhanced my leadership and organization skills. <br> This site contains the different projects I have undertaken. Feel free to contact me if you have any questions.
 :::
