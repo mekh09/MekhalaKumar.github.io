@@ -4,17 +4,17 @@ title: "Newsletters"
 
 At Trendency Research, I contributed to newsletters focused on political issues. Below are some highlights with links:
 
-[Biden and Age](https://polticial-trendwatch.beehiiv.com/p/biden-age)\
+[Biden and Age](posts/newsletters/Biden And Age.pdf)\
 Led ideation, text analysis and visualization of voter concerns about US presidential candidates' age as well as general perceptions of candidates. Contributed to writing. 
 
-[Younger Voters and the Supreme Court](https://polticial-trendwatch.beehiiv.com/p/younger-voters-supreme-court)
+[Younger Voters and the Supreme Court](https://trendency.com/political/younger-voters-and-the-supreme-court/)
 
 Collaborated with the team to design survey questions aimed at capturing the perceptions of voters under 40 regarding the U.S. Supreme Court, with particular emphasis on the 2024 homelessness ruling that banned sleeping in public places. Played a primary role in analyzing responses, creating visualizations and writing.
 
 Worked jointly with team members on analysis these newsletters related to key events in Summer 2024 affecting the US presidential race:
 
-[Can Biden Still Win](https://polticial-trendwatch.beehiiv.com/p/can-biden-still-win)
+[Can Biden Still Win](posts/newsletters/Can Biden Still Win_.pdf)
 
-[Effects of the Mid-Summer Switch Up](https://polticial-trendwatch.beehiiv.com/p/effects-midsummer-switchup)
+[Effects of the Mid-Summer Switch Up](posts/newsletters/Effects of the Mid-Summer Switch-Up.pdf)
 
-[A Summer for the Ages](https://polticial-trendwatch.beehiiv.com/p/summer-ages)
+[A Summer for the Ages](posts/newsletters/A Summer for the Ages.pdf)
